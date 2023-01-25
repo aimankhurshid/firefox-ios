@@ -5,7 +5,6 @@
 import WebKit
 
 class UserScriptManager {
-
     // Scripts can use this to verify the *app* (not JS on the web) is calling into them.
     public static let appIdToken = UUID().uuidString
 
@@ -14,9 +13,18 @@ class UserScriptManager {
 
     private let compiledUserScripts: [String: WKUserScript]
 
-    private let noImageModeUserScript = WKUserScript.createInDefaultContentWorld(source: "window.__firefox__.NoImageMode.setEnabled(true)", injectionTime: .atDocumentStart, forMainFrameOnly: true)
-    private let nightModeUserScript = WKUserScript.createInDefaultContentWorld(source: "window.__firefox__.NightMode.setEnabled(true)", injectionTime: .atDocumentStart, forMainFrameOnly: true)
-    private let printHelperUserScript = WKUserScript.createInPageContentWorld(source: "window.print = function () { window.webkit.messageHandlers.printHandler.postMessage({}) }", injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+    private let noImageModeUserScript = WKUserScript.createInDefaultContentWorld(
+        source: "window.__firefox__.NoImageMode.setEnabled(true)",
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true)
+    private let nightModeUserScript = WKUserScript.createInDefaultContentWorld(
+        source: "window.__firefox__.NightMode.setEnabled(true)",
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true)
+    private let printHelperUserScript = WKUserScript.createInPageContentWorld(
+        source: "window.print = function () { window.webkit.messageHandlers.printHandler.postMessage({}) }",
+        injectionTime: .atDocumentEnd,
+        forMainFrameOnly: false)
 
     private init() {
         var compiledUserScripts: [String: WKUserScript] = [:]
@@ -42,7 +50,6 @@ class UserScriptManager {
                 let userScript = WKUserScript.createInPageContentWorld(source: wrappedSource, injectionTime: injectionTime, forMainFrameOnly: mainFrameOnly)
                 compiledUserScripts[webcompatName] = userScript
             }
-            
         }
 
         self.compiledUserScripts = compiledUserScripts

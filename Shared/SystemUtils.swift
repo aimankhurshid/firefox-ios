@@ -8,7 +8,6 @@ import Foundation
  *  System helper methods written in Swift.
  */
 public struct SystemUtils {
-
     /**
      Returns an accurate version of the system uptime even while the device is asleep.
      http://stackoverflow.com/questions/12488481/getting-ios-system-uptime-that-doesnt-pause-when-asleep
@@ -35,9 +34,7 @@ extension SystemUtils {
     // and not accessible from extension when the device is locked. Thus, we can tell if an extension is being run
     // when the device is locked.
     public static func onFirstRun() {
-        guard let lockFileURL = lockedDeviceURL else {
-            return
-        }
+        guard let lockFileURL = lockedDeviceURL else { return }
 
         let lockFile = lockFileURL.path
         let fm = FileManager.default

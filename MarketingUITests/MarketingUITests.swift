@@ -5,8 +5,7 @@
 import XCTest
 
 class MarketingSnapshotTests: XCTestCase {
-
-    let LoadingTimeout: NSTimeInterval = 60
+    let loadingTimeout: NSTimeInterval = 60
     let exists = NSPredicate(format: "exists = true")
     let loaded = NSPredicate(format: "value BEGINSWITH '100'")
 
@@ -46,11 +45,10 @@ class MarketingSnapshotTests: XCTestCase {
         expectationForPredicate(exists, evaluatedWithObject: progressIndicator, handler: nil)
         expectationForPredicate(loaded, evaluatedWithObject: progressIndicator, handler: nil)
         app.typeText("\n")
-        waitForExpectations(timeout: LoadingTimeout, handler: nil)
+        waitForExpectations(timeout: loadingTimeout, handler: nil)
     }
 
     func testTakeMarketingScreenshots() {
-
         let app = XCUIApplication()
 
         // dismiss the intro tour
@@ -99,13 +97,13 @@ class MarketingSnapshotTests: XCTestCase {
         // cancel search
         app.buttons.elementBoundByIndex(1).tap()
     }
-
 }
 
 extension XCUIElementQuery {
     func firstWithName(name: String) -> XCUIElement {
         let values = self.containingPredicate(NSPredicate(format: "label = '\(name)'"))
-        if values.count > 0 {
+        let valuesCount = values.count
+        if valuesCount > 0 {
             return values.elementBoundByIndex(0)
         }
 

@@ -3,30 +3,36 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import Shared
+import Common
 
-class StartAtHomeHelper: FeatureFlagsProtocol {
+class StartAtHomeHelper: FeatureFlaggable {
     private var isRestoringTabs: Bool
-    // Override only for unit test to test `shouldSkipStartHome` logic
-    private var isRunningTest: Bool
-    lazy var startAtHomeSetting: StartAtHomeSetting? = featureFlags.userPreferenceFor(.startAtHome)
-    
-    init(isRestoringTabs: Bool,
-         isRunnigTest: Bool = AppConstants.IsRunningTest) {
+    // Override only for UI tests to test `shouldSkipStartHome` logic
+    private var isRunningUITest: Bool
+    lazy var startAtHomeSetting: StartAtHomeSetting? = featureFlags.getCustomState(for: .startAtHome)
+    var launchSessionProvider: LaunchSessionProviderProtocol
+
+    init(appSessionManager: AppSessionProvider = AppContainer.shared.resolve(),
+         isRestoringTabs: Bool,
+         isRunningUITest: Bool = AppConstants.isRunningUITests
+    ) {
+        self.launchSessionProvider = appSessionManager.launchSessionProvider
         self.isRestoringTabs = isRestoringTabs
-        self.isRunningTest = isRunnigTest
+        self.isRunningUITest = isRunningUITest
     }
-    
+
     var shouldSkipStartHome: Bool {
-        return isRunningTest ||
-              DebugSettingsBundleOptions.skipSessionRestore ||
-              isRestoringTabs
+        return isRunningUITest ||
+        DebugSettingsBundleOptions.skipSessionRestore ||
+        isRestoringTabs ||
+        launchSessionProvider.openedFromExternalSource
     }
 
     /// Determines whether the Start at Home feature is enabled, how long it has been since
     /// the user's last activity and whether, based on their settings, Start at Home feature
     /// should perform its function.
     public func shouldStartAtHome() -> Bool {
-        guard featureFlags.isFeatureActiveForBuild(.startAtHome),
+        guard featureFlags.isFeatureEnabled(.startAtHome, checking: .buildOnly),
               let setting = startAtHomeSetting,
               setting != .disabled
         else { return false }

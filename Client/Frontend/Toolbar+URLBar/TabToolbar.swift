@@ -3,11 +3,9 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0
 
 import UIKit
-import SnapKit
 import Shared
 
 class TabToolbar: UIView {
-
     // MARK: - Variables
 
     weak var tabToolbarDelegate: TabToolbarDelegate?
@@ -21,13 +19,11 @@ class TabToolbar: UIView {
     let multiStateButton = ToolbarButton()
     let actionButtons: [NotificationThemeable & UIButton]
 
-    private var isBottomSearchBar: Bool {
-        return BrowserViewController.foregroundBVC().isBottomSearchBar
-    }
-
-    private let privateModeBadge = BadgeWithBackdrop(imageName: "privateModeBadge", backdropCircleColor: UIColor.Defaults.MobilePrivatePurple)
-    private let appMenuBadge = BadgeWithBackdrop(imageName: "menuBadge")
-    private let warningMenuBadge = BadgeWithBackdrop(imageName: "menuWarning", imageMask: "warning-mask")
+    private let privateModeBadge = BadgeWithBackdrop(imageName: ImageIdentifiers.privateModeBadge,
+                                                     backdropCircleColor: UIColor.Defaults.MobilePrivatePurple)
+    private let appMenuBadge = BadgeWithBackdrop(imageName: ImageIdentifiers.menuBadge)
+    private let warningMenuBadge = BadgeWithBackdrop(imageName: ImageIdentifiers.menuWarning,
+                                                     imageMask: ImageIdentifiers.menuWarningMask)
 
     var helper: TabToolbarHelper?
     private let contentView = UIStackView()
@@ -48,12 +44,13 @@ class TabToolbar: UIView {
 
         contentView.axis = .horizontal
         contentView.distribution = .fillEqually
+        contentView.translatesAutoresizingMaskIntoConstraints = false
     }
-    
+
     required init(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     // MARK: - View Setup
 
     override func updateConstraints() {
@@ -61,10 +58,12 @@ class TabToolbar: UIView {
         appMenuBadge.layout(onButton: appMenuButton)
         warningMenuBadge.layout(onButton: appMenuButton)
 
-        contentView.snp.makeConstraints { make in
-            make.leading.trailing.top.equalTo(self)
-            make.bottom.equalTo(self.safeArea.bottom)
-        }
+        NSLayoutConstraint.activate([
+            contentView.topAnchor.constraint(equalTo: topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
+        ])
         super.updateConstraints()
     }
 
@@ -127,14 +126,15 @@ extension TabToolbar: TabToolbarProtocol {
         helper?.setMiddleButtonState(state)
     }
 
-    func updatePageStatus(_ isWebPage: Bool) {
-
-    }
+    func updatePageStatus(_ isWebPage: Bool) { }
 
     func updateTabCount(_ count: Int, animated: Bool) {
         tabsButton.updateTabCount(count, animated: animated)
     }
 }
+
+// MARK: - Search Bar location properties
+extension TabToolbar: SearchBarLocationProvider {}
 
 // MARK: - Theme protocols
 

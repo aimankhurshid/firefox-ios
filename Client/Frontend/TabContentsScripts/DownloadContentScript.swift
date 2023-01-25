@@ -5,6 +5,7 @@
 import Foundation
 import Shared
 import WebKit
+import Common
 
 class DownloadContentScript: TabContentScript {
     fileprivate weak var tab: Tab?
@@ -12,13 +13,16 @@ class DownloadContentScript: TabContentScript {
     // Non-blob URLs use the webview to download, by navigating in the webview to the requested URL.
     // Blobs however, use the JS content script to download using XHR
     fileprivate static var blobUrlForDownload: URL?
+    private let downloadQueue: DownloadQueue
 
     class func name() -> String {
         return "DownloadContentScript"
     }
 
-    required init(tab: Tab) {
+    required init(tab: Tab,
+                  downloadQueue: DownloadQueue = AppContainer.shared.resolve()) {
         self.tab = tab
+        self.downloadQueue = downloadQueue
     }
 
     func scriptMessageHandlerName() -> String? {
@@ -43,18 +47,21 @@ class DownloadContentScript: TabContentScript {
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceiveScriptMessage message: WKScriptMessage) {
-        guard let browserViewController = tab?.browserViewController,
-            let dictionary = message.body as? [String: Any?],
-            let _url = dictionary["url"] as? String,
-            let url = URL(string: _url),
-            let mimeType = dictionary["mimeType"] as? String,
-            let size = dictionary["size"] as? Int64,
-            let base64String = dictionary["base64String"] as? String,
-            let data = Bytes.decodeBase64(base64String) else {
-            return
-        }
+        guard let dictionary = message.body as? [String: Any?],
+              let _url = dictionary["url"] as? String,
+              let url = URL(string: _url),
+              let mimeType = dictionary["mimeType"] as? String,
+              let size = dictionary["size"] as? Int64,
+              let base64String = dictionary["base64String"] as? String,
+              let data = Bytes.decodeBase64(base64String)
+        else { return }
+
+        // TODO: Could we have a download queue per tab instead of resolving from foregroundBVC?
+        // Or one that is independent of BVC at least?
+        let browserViewController = BrowserViewController.foregroundBVC()
+
         defer {
-            browserViewController.pendingDownloadWebView = nil
+            browserViewController?.pendingDownloadWebView = nil
             DownloadContentScript.blobUrlForDownload = nil
         }
 
@@ -81,6 +88,6 @@ class DownloadContentScript: TabContentScript {
         }
 
         let download = BlobDownload(filename: filename, mimeType: mimeType, size: size, data: data)
-        tab?.browserViewController?.downloadQueue.enqueue(download)
+        downloadQueue.enqueue(download)
     }
 }

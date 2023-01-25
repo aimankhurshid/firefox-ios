@@ -4,13 +4,13 @@
 
 import Foundation
 import Shared
-import XCGLogger
 import SwiftyJSON
 import MozillaAppServices
 
-
 public let FxAClientErrorDomain = "org.mozilla.fxa.error"
-public let FxAClientUnknownError = NSError(domain: FxAClientErrorDomain, code: 999,
+public let FxAClientUnknownError = NSError(
+    domain: FxAClientErrorDomain,
+    code: 999,
     userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
 
 public struct FxAccountRemoteError {
@@ -60,7 +60,6 @@ public struct RemoteError {
     }
 }
 
-
 private let CurrentSyncAuthStateCacheVersion = 1
 
 private let log = Logger.syncLogger
@@ -84,10 +83,9 @@ public func syncAuthStateCachefromJSON(_ json: JSON) -> SyncAuthStateCache? {
             log.warning("Sync Auth State Cache is wrong version; dropping.")
             return nil
         }
-        if let
-            token = TokenServerToken.fromJSON(json["token"]),
-            let forKey = json["forKey"].string?.hexDecodedData,
-            let expiresAt = json["expiresAt"].int64 {
+        if let token = TokenServerToken.fromJSON(json["token"]),
+           let forKey = json["forKey"].string?.hexDecodedData,
+           let expiresAt = json["expiresAt"].int64 {
             return SyncAuthStateCache(token: token, forKey: forKey, expiresAt: Timestamp(expiresAt))
         }
     }
@@ -142,7 +140,7 @@ open class FirefoxAccountSyncAuthState: SyncAuthState {
         let deferred = Deferred<Maybe<(token: TokenServerToken, forKey: Data)>>()
 
         RustFirefoxAccounts.shared.accountManager.uponQueue(.main) { accountManager in
-            accountManager.getTokenServerEndpointURL() { result in
+            accountManager.getTokenServerEndpointURL { result in
                 guard case .success(let tokenServerEndpointURL) = result else {
                     deferred.fill(Maybe(failure: FxAClientError.local(NSError())))
                     return
@@ -151,11 +149,11 @@ open class FirefoxAccountSyncAuthState: SyncAuthState {
                 let client = TokenServerClient(url: tokenServerEndpointURL)
                 accountManager.getAccessToken(scope: OAuthScope.oldSync) { res in
                     switch res {
-                        case .failure(let err):
-                            deferred.fill(Maybe(failure: err as MaybeErrorType))
-                        case .success(let accessToken):
-                            log.debug("Fetching token server token.")
-                            client.token(token: accessToken.token, kid: accessToken.key!.kid).upon { result in
+                    case .failure(let err):
+                        deferred.fill(Maybe(failure: err as MaybeErrorType))
+                    case .success(let accessToken):
+                        log.debug("Fetching token server token.")
+                        client.token(token: accessToken.token, kid: accessToken.key!.kid).upon { result in
                             guard let token = result.successValue else {
                                 deferred.fill(Maybe(failure: result.failureValue!))
                                 return

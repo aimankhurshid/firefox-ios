@@ -10,24 +10,21 @@ enum AppSettingsDeeplinkOption {
     case customizeHomepage
     case customizeTabs
     case customizeToolbar
+    case customizeTopSites
     case wallpaper
 }
 
 /// App Settings Screen (triggered by tapping the 'Gear' in the Tab Tray Controller)
-class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsProtocol {
-
+class AppSettingsTableViewController: SettingsTableViewController, FeatureFlaggable {
     // MARK: - Properties
     var deeplinkTo: AppSettingsDeeplinkOption?
-    var nimbus: FxNimbus
 
     // MARK: - Initializers
     init(with profile: Profile,
          and tabManager: TabManager,
          delegate: SettingsDelegate?,
-         deeplinkingTo destination: AppSettingsDeeplinkOption? = nil,
-         with nimbus: FxNimbus = FxNimbus.shared) {
+         deeplinkingTo destination: AppSettingsDeeplinkOption? = nil) {
         self.deeplinkTo = destination
-        self.nimbus = nimbus
 
         super.init()
         self.profile = profile
@@ -43,22 +40,19 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        let variables = Experiments.shared.getVariables(featureId: .nimbusValidation)
-        let title = variables.getText("settings-title") ?? .AppSettingsTitle
-        let suffix = variables.getString("settings-title-punctuation") ?? ""
-
-        navigationItem.title = "\(title)\(suffix)"
+        navigationItem.title = String.AppSettingsTitle
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: .AppSettingsDone,
             style: .done,
-            target: navigationController, action: #selector((navigationController as! ThemedNavigationController).done))
+            target: navigationController,
+            action: #selector((navigationController as! ThemedNavigationController).done))
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "AppSettingsTableViewController.navigationItem.leftBarButtonItem"
 
         tableView.accessibilityIdentifier = "AppSettingsTableViewController.tableView"
 
         // Refresh the user's FxA profile upon viewing settings. This will update their avatar,
         // display name, etc.
-        ////profile.rustAccount.refreshProfile()
+        //// profile.rustAccount.refreshProfile()
 
         checkForDeeplinkSetting()
     }
@@ -74,20 +68,27 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
 
         case .customizeHomepage:
             viewController = HomePageSettingViewController(prefs: profile.prefs)
-            
+
         case .customizeTabs:
             viewController = TabsSettingsViewController()
-            
+
         case .customizeToolbar:
             let viewModel = SearchBarSettingsViewModel(prefs: profile.prefs)
             viewController = SearchBarSettingsViewController(viewModel: viewModel)
 
         case .wallpaper:
-            let viewModel = WallpaperSettingsViewModel(with: tabManager, and: WallpaperManager())
-            let wallpaperVC = WallpaperSettingsViewController(with: viewModel)
-            // Push wallpaper settings view controller directly as its not of type settings viewcontroller
-            navigationController?.pushViewController(wallpaperVC, animated: true)
+            let wallpaperManager = WallpaperManager()
+            if wallpaperManager.canSettingsBeShown {
+                let viewModel = WallpaperSettingsViewModel(wallpaperManager: wallpaperManager,
+                                                           tabManager: tabManager,
+                                                           theme: themeManager.currentTheme)
+                let wallpaperVC = WallpaperSettingsViewController(viewModel: viewModel)
+                navigationController?.pushViewController(wallpaperVC, animated: true)
+            }
             return
+
+        case .customizeTopSites:
+            viewController = TopSitesSettingsViewController()
         }
 
         viewController.profile = profile
@@ -107,20 +108,24 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
             OpenWithSetting(settings: self),
             ThemeSetting(settings: self),
             SiriPageSetting(settings: self),
-            BoolSetting(prefs: prefs, prefKey: PrefsKeys.KeyBlockPopups, defaultValue: true,
-                        titleText: .AppSettingsBlockPopups),
+            BoolSetting(
+                prefs: prefs,
+                theme: themeManager.currentTheme,
+                prefKey: PrefsKeys.KeyBlockPopups,
+                defaultValue: true,
+                titleText: .AppSettingsBlockPopups),
             NoImageModeSetting(settings: self)
            ]
 
-        if SearchBarSettingsViewModel.isEnabled {
+        if isSearchBarLocationFeatureEnabled {
             generalSettings.insert(SearchBarSetting(settings: self), at: 5)
         }
 
-        let tabTrayGroupsAreBuildActive = featureFlags.isFeatureActiveForBuild(.tabTrayGroups)
-        let inactiveTabsAreBuildActive = featureFlags.isFeatureActiveForBuild(.inactiveTabs)
-        if let inactiveTabsAreNimbusActive = nimbus.features.tabTrayFeature.value().sectionsEnabled[.inactiveTabs],
-           tabTrayGroupsAreBuildActive || (inactiveTabsAreBuildActive && inactiveTabsAreNimbusActive) {
-            generalSettings.insert(TabsSetting(), at: 3)
+        let autofillCreditCardStatus = featureFlags.isFeatureEnabled(.creditCardAutofillStatus, checking: .buildOnly)
+        let tabTrayGroupsAreBuildActive = featureFlags.isFeatureEnabled(.tabTrayGroups, checking: .buildOnly)
+        let inactiveTabsAreBuildActive = featureFlags.isFeatureEnabled(.inactiveTabs, checking: .buildOnly)
+        if tabTrayGroupsAreBuildActive || inactiveTabsAreBuildActive {
+            generalSettings.insert(TabsSetting(theme: themeManager.currentTheme), at: 3)
         }
 
         let accountChinaSyncSetting: [Setting]
@@ -137,23 +142,32 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
         // be changed.
 
         generalSettings += [
-            BoolSetting(prefs: prefs, prefKey: "showClipboardBar", defaultValue: false,
-                        titleText: .SettingsOfferClipboardBarTitle,
-                        statusText: .SettingsOfferClipboardBarStatus),
-            BoolSetting(prefs: prefs, prefKey: PrefsKeys.ContextMenuShowLinkPreviews, defaultValue: true,
-                        titleText: .SettingsShowLinkPreviewsTitle,
-                        statusText: .SettingsShowLinkPreviewsStatus)
+            BoolSetting(
+                prefs: prefs,
+                theme: themeManager.currentTheme,
+                prefKey: "showClipboardBar",
+                defaultValue: false,
+                titleText: .SettingsOfferClipboardBarTitle,
+                statusText: .SettingsOfferClipboardBarStatus),
+            BoolSetting(
+                prefs: prefs,
+                theme: themeManager.currentTheme,
+                prefKey: PrefsKeys.ContextMenuShowLinkPreviews,
+                defaultValue: true,
+                titleText: .SettingsShowLinkPreviewsTitle,
+                statusText: .SettingsShowLinkPreviewsStatus)
         ]
 
         if #available(iOS 14.0, *) {
             settings += [
-                SettingSection(footerTitle: NSAttributedString(string: String.DefaultBrowserCardDescription), children: [DefaultBrowserSetting()])
+                SettingSection(footerTitle: NSAttributedString(string: String.FirefoxHomepage.HomeTabBanner.EvergreenMessage.HomeTabBannerDescription),
+                               children: [DefaultBrowserSetting(theme: themeManager.currentTheme)])
             ]
         }
 
         let accountSectionTitle = NSAttributedString(string: .FxAFirefoxAccount)
 
-        let footerText = !profile.hasAccount() ? NSAttributedString(string: .FxASyncUsageDetails) : nil
+        let footerText = !profile.hasAccount() ? NSAttributedString(string: .Settings.Sync.ButtonDescription) : nil
         settings += [
             SettingSection(title: accountSectionTitle, footerTitle: footerText, children: [
                 // Without a Firefox Account:
@@ -171,12 +185,17 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
 
         privacySettings.append(ClearPrivateDataSetting(settings: self))
 
+        if autofillCreditCardStatus {
+            privacySettings.append(AutofillCreditCardSettings(settings: self))
+        }
+
         privacySettings += [
             BoolSetting(prefs: prefs,
-                prefKey: "settings.closePrivateTabs",
-                defaultValue: false,
-                titleText: .AppSettingsClosePrivateTabsTitle,
-                statusText: .AppSettingsClosePrivateTabsDescription)
+                        theme: themeManager.currentTheme,
+                        prefKey: "settings.closePrivateTabs",
+                        defaultValue: false,
+                        titleText: .AppSettingsClosePrivateTabsTitle,
+                        statusText: .AppSettingsClosePrivateTabsDescription)
         ]
 
         privacySettings.append(ContentBlockerSetting(settings: self))
@@ -190,9 +209,9 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
             SettingSection(title: NSAttributedString(string: .AppSettingsSupport), children: [
                 ShowIntroductionSetting(settings: self),
                 SendFeedbackSetting(),
-                SendAnonymousUsageDataSetting(prefs: prefs, delegate: settingsDelegate),
-                StudiesToggleSetting(prefs: prefs, delegate: settingsDelegate),
-                OpenSupportPageSetting(delegate: settingsDelegate),
+                SendAnonymousUsageDataSetting(prefs: prefs, delegate: settingsDelegate, theme: themeManager.currentTheme),
+                StudiesToggleSetting(prefs: prefs, delegate: settingsDelegate, theme: themeManager.currentTheme),
+                OpenSupportPageSetting(delegate: settingsDelegate, theme: themeManager.currentTheme),
             ]),
             SettingSection(title: NSAttributedString(string: .AppSettingsAbout), children: [
                 AppStoreReviewSetting(),
@@ -207,9 +226,8 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
                 ForgetSyncAuthStateDebugSetting(settings: self),
                 SentryIDSetting(settings: self),
                 ChangeToChinaSetting(settings: self),
-                ShowEtpCoverSheet(settings: self),
-                ToggleChronTabs(settings: self),
                 TogglePullToRefresh(settings: self),
+                ResetWallpaperOnboardingPage(settings: self),
                 ToggleInactiveTabs(settings: self),
                 ToggleHistoryGroups(settings: self),
                 ResetContextualHints(settings: self),
@@ -225,3 +243,5 @@ class AppSettingsTableViewController: SettingsTableViewController, FeatureFlagsP
         return headerView
     }
 }
+
+extension AppSettingsTableViewController: SearchBarLocationProvider {}

@@ -5,7 +5,6 @@
 import UIKit
 
 class ToolbarTextField: AutocompleteTextField {
-
     // MARK: - Variables
     @objc dynamic var clearButtonTintColor: UIColor? {
         didSet {
@@ -50,10 +49,13 @@ class ToolbarTextField: AutocompleteTextField {
 
     // The default button size is 19x19, make this larger
     override func clearButtonRect(forBounds bounds: CGRect) -> CGRect {
-        let r = super.clearButtonRect(forBounds: bounds)
+        let rect = super.clearButtonRect(forBounds: bounds)
         let grow: CGFloat = 16
-        let r2 = CGRect(x: r.minX - grow/2, y: r.minY - grow/2, width: r.width + grow, height: r.height + grow)
-        return r2
+        let rect2 = CGRect(x: rect.minX - grow/2,
+                           y: rect.minY - grow/2,
+                           width: rect.width + grow,
+                           height: rect.height + grow)
+        return rect2
     }
 }
 
@@ -70,5 +72,23 @@ extension ToolbarTextField: NotificationThemeable {
     // ToolbarTextField is created on-demand, so the textSelectionColor is a static prop for use when created
     static func applyUIMode(isPrivate: Bool) {
        textSelectionColor = UIColor.theme.urlbar.textSelectionHighlight(isPrivate)
+    }
+}
+
+// MARK: - Key commands
+
+extension ToolbarTextField {
+    override var keyCommands: [UIKeyCommand]? {
+        let commands = [
+            UIKeyCommand(action: #selector(handleKeyboardArrowKey(sender:)),
+                         input: UIKeyCommand.inputRightArrow),
+            UIKeyCommand(action: #selector(handleKeyboardArrowKey(sender:)),
+                         input: UIKeyCommand.inputLeftArrow),
+        ]
+        return commands
+    }
+
+    @objc private func handleKeyboardArrowKey(sender: UIKeyCommand) {
+        self.selectedTextRange = nil
     }
 }

@@ -15,11 +15,8 @@ struct SafelistedDomains {
 }
 
 extension ContentBlocker {
-
     func safelistFileURL() -> URL? {
-        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return nil
-        }
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
         return dir.appendingPathComponent("safelist")
     }
 
@@ -55,7 +52,6 @@ extension ContentBlocker {
             self.compileListsNotInStore {
                 completion?()
                 NotificationCenter.default.post(name: .contentBlockerTabSetupRequired, object: nil)
-
             }
         }
 
@@ -74,9 +70,7 @@ extension ContentBlocker {
     }
     // Ensure domains used for safelisting are standardized by using this function.
     func safelistableDomain(fromUrl url: URL) -> String? {
-        guard let domain = url.host, !domain.isEmpty else {
-            return nil
-        }
+        guard let domain = url.host, !domain.isEmpty else { return nil }
         return domain
     }
 

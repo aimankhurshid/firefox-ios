@@ -4,7 +4,8 @@
 
 import Foundation
 import NotificationCenter
-protocol TodayWidgetAppearanceDelegate {
+
+protocol TodayWidgetAppearanceDelegate: AnyObject {
     func openContainingApp(_ urlSuffix: String, query: String)
 }
 
@@ -16,23 +17,24 @@ class TodayWidgetViewModel {
     }
 
     func updateCopiedLink() {
-        if !UIPasteboard.general.hasURLs {
+        if UIPasteboard.general.hasURLs {
+            UIPasteboard.general.asyncURL { url in
+                DispatchQueue.main.async {
+                    guard let url: URL = url else {
+                        TodayModel.copiedURL = nil
+                        return
+                    }
+                    TodayModel.copiedURL = url
+                    self.AppearanceDelegate?.openContainingApp("?url=\(TodayModel.copiedURL?.absoluteString.escape() ?? "")", query: "open-url")
+                }
+            }
+        } else {
             guard let searchText = UIPasteboard.general.string else {
                 TodayModel.searchedText = nil
                 return
             }
             TodayModel.searchedText = searchText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
             self.AppearanceDelegate?.openContainingApp("?text=\(TodayModel.searchedText ?? "")", query: "open-text")
-        } else {
-            UIPasteboard.general.asyncURL().uponQueue(.main) { res in
-                guard let url: URL? = res.successValue else {
-                    TodayModel.copiedURL = nil
-                    return
-                }
-                TodayModel.copiedURL = url
-                self.AppearanceDelegate?.openContainingApp("?url=\(TodayModel.copiedURL?.absoluteString.escape() ?? "")", query: "open-url")
-            }
         }
     }
 }
-

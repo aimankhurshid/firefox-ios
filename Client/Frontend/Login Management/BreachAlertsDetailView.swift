@@ -5,8 +5,8 @@
 import UIKit
 import Shared
 
+// TODO: FXIOS-4995 - BreachAlertsManager theming
 class BreachAlertsDetailView: UIView {
-
     private let textColor = UIColor.white
     private let titleIconSize: CGFloat = 24
     private lazy var titleIconContainerSize: CGFloat = {
@@ -122,6 +122,7 @@ class BreachAlertsDetailView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
 
+        // TODO: FXIOS-4995 - BreachAlertsManager theming
         self.backgroundColor = BreachAlertsManager.lightMode
         self.layer.cornerRadius = 5
         self.layer.masksToBounds = true

@@ -10,6 +10,7 @@ import UIKit
 protocol PhotonActionSheetProtocol {
     var tabManager: TabManager { get }
     var profile: Profile { get }
+    var themeManager: ThemeManager { get }
 }
 
 extension PhotonActionSheetProtocol {
@@ -19,7 +20,6 @@ extension PhotonActionSheetProtocol {
     func presentSheetWith(viewModel: PhotonActionSheetViewModel,
                           on viewController: PresentableVC,
                           from view: UIView) {
-
         let sheet = PhotonActionSheet(viewModel: viewModel)
         sheet.modalPresentationStyle = viewModel.modalStyle
         sheet.photonTransitionDelegate = PhotonActionSheetAnimator()
@@ -56,7 +56,8 @@ extension PhotonActionSheetProtocol {
             if let url = tabManager.selectedTab?.canonicalURL?.displayURL ?? urlBar.currentURL {
                 UIPasteboard.general.url = url
                 SimpleToast().showAlertWithText(.AppMenu.AppMenuCopyURLConfirmMessage,
-                                                bottomContainer: webViewContainer)
+                                                bottomContainer: webViewContainer,
+                                                theme: themeManager.currentTheme)
             }
         }.items
 
@@ -80,7 +81,6 @@ extension PhotonActionSheetProtocol {
             toggleActionTitle = tab.changedUserAgent ? .AppMenu.AppMenuViewMobileSiteTitleString : .AppMenu.AppMenuViewDesktopSiteTitleString
         }
         let toggleDesktopSite = SingleActionViewModel(title: toggleActionTitle, iconString: ImageIdentifiers.requestDesktopSite) { _ in
-
             if let url = tab.url {
                 tab.toggleChangeUserAgent()
                 Tab.ChangeUserAgent.updateDomainList(forUrl: url, isChangedUA: tab.changedUserAgent, isPrivate: tab.isPrivate)
@@ -102,5 +102,4 @@ extension PhotonActionSheetProtocol {
             return [toggleDesktopSite]
         }
     }
-
 }

@@ -9,7 +9,6 @@ let testPageBase = "http://www.example.com"
 let loremIpsumURL = "\(testPageBase)"
 
 class L10nBaseSnapshotTests: XCTestCase {
-
     var app: XCUIApplication!
     var navigator: MMNavigator<FxUserState>!
     var userState: FxUserState!
@@ -19,7 +18,7 @@ class L10nBaseSnapshotTests: XCTestCase {
                 LaunchArguments.SkipETPCoverSheet,
                 LaunchArguments.SkipIntro,
                 LaunchArguments.SkipContextualHints,
-                LaunchArguments.ChronTabs]
+                LaunchArguments.TurnOffTabGroupsInUserPreferences]
 
     override func setUp() {
         super.setUp()

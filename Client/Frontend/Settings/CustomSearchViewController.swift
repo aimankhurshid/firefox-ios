@@ -6,12 +6,9 @@ import UIKit
 import Shared
 import SnapKit
 import Storage
-import SDWebImage
-
-private let log = Logger.browserLogger
+import SiteImageView
 
 class CustomSearchError: MaybeErrorType {
-
     enum Reason {
         case DuplicateEngine, FormInput
     }
@@ -28,15 +25,25 @@ class CustomSearchError: MaybeErrorType {
 }
 
 class CustomSearchViewController: SettingsTableViewController {
-
-    fileprivate var urlString: String?
-    fileprivate var engineTitle = ""
-    fileprivate lazy var spinnerView: UIActivityIndicatorView = {
+    private let faviconFetcher: SiteImageHandler
+    private var urlString: String?
+    private var engineTitle = ""
+    var successCallback: (() -> Void)?
+    private lazy var spinnerView: UIActivityIndicatorView = {
         let spinner = UIActivityIndicatorView(style: .medium)
-        spinner.color = .systemGray
+        spinner.color = themeManager.currentTheme.colors.iconSpinner
         spinner.hidesWhenStopped = true
         return spinner
     }()
+
+    init(faviconFetcher: SiteImageHandler = DefaultSiteImageHandler.factory()) {
+        self.faviconFetcher = faviconFetcher
+        super.init()
+    }
+
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -47,60 +54,68 @@ class CustomSearchViewController: SettingsTableViewController {
         }
     }
 
-    var successCallback: (() -> Void)?
-
-    fileprivate func addSearchEngine(_ searchQuery: String, title: String) {
+    private func addSearchEngine(_ searchQuery: String, title: String) {
         spinnerView.startAnimating()
 
         let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        createEngine(forQuery: trimmedQuery, andName: trimmedTitle).uponQueue(.main) { result in
-            self.spinnerView.stopAnimating()
-            guard let engine = result.successValue else {
+        Task {
+            do {
+                let engine = try await createEngine(query: trimmedQuery, name: trimmedTitle)
+                self.spinnerView.stopAnimating()
+                self.profile.searchEngines.addSearchEngine(engine)
+
+                CATransaction.begin() // Use transaction to call callback after animation has been completed
+                CATransaction.setCompletionBlock(self.successCallback)
+                _ = self.navigationController?.popViewController(animated: true)
+                CATransaction.commit()
+            } catch {
+                self.spinnerView.stopAnimating()
                 let alert: UIAlertController
-                let error = result.failureValue as? CustomSearchError
+                let error = error as? CustomSearchError
 
                 alert = (error?.reason == .DuplicateEngine) ?
                     ThirdPartySearchAlerts.duplicateCustomEngine() : ThirdPartySearchAlerts.incorrectCustomEngineForm()
 
                 self.navigationItem.rightBarButtonItem?.isEnabled = true
                 self.present(alert, animated: true, completion: nil)
-                return
             }
-            self.profile.searchEngines.addSearchEngine(engine)
-
-            CATransaction.begin() // Use transaction to call callback after animation has been completed
-            CATransaction.setCompletionBlock(self.successCallback)
-            _ = self.navigationController?.popViewController(animated: true)
-            CATransaction.commit()
         }
     }
 
-    func createEngine(forQuery query: String, andName name: String) -> Deferred<Maybe<OpenSearchEngine>> {
-        let deferred = Deferred<Maybe<OpenSearchEngine>>()
+    func createEngine(query: String, name: String) async throws -> OpenSearchEngine {
         guard let template = getSearchTemplate(withString: query),
-            let url = URL(string: template.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed)!), url.isWebPage() else {
-                deferred.fill(Maybe(failure: CustomSearchError(.FormInput)))
-                return deferred
+              let encodedTemplate = template.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
+              let url = URL(string: encodedTemplate),
+              url.isWebPage()
+        else {
+            throw CustomSearchError(.FormInput)
         }
 
         // ensure we haven't already stored this template
         guard engineExists(name: name, template: template) == false else {
-            deferred.fill(Maybe(failure: CustomSearchError(.DuplicateEngine)))
-            return deferred
+            throw CustomSearchError(.DuplicateEngine)
         }
 
-        FaviconFetcher.fetchFavImageForURL(forURL: url, profile: profile).uponQueue(.main) { result in
-            let image = result.successValue ?? FaviconFetcher.letter(forUrl: url)
-            let engine = OpenSearchEngine(engineID: nil, shortName: name, image: image, searchTemplate: template, suggestTemplate: nil, isCustomEngine: true)
+        let result = await faviconFetcher.getImage(urlStringRequest: url.absoluteString,
+                                                   type: .favicon,
+                                                   id: UUID(),
+                                                   usesIndirectDomain: false)
 
-            //Make sure a valid scheme is used
-            let url = engine.searchURLForQuery("test")
-            let maybe = (url == nil) ? Maybe(failure: CustomSearchError(.FormInput)) : Maybe(success: engine)
-            deferred.fill(maybe)
+        let engine = OpenSearchEngine(engineID: nil,
+                                      shortName: name,
+                                      image: result.faviconImage ?? UIImage(),
+                                      searchTemplate: template,
+                                      suggestTemplate: nil,
+                                      isCustomEngine: true)
+
+        // Make sure a valid scheme is used
+        guard engine.searchURLForQuery("test") != nil else {
+            throw CustomSearchError(.FormInput)
         }
-        return deferred
+
+        return engine
     }
 
     private func engineExists(name: String, template: String) -> Bool {
@@ -110,49 +125,51 @@ class CustomSearchViewController: SettingsTableViewController {
     }
 
     func getSearchTemplate(withString query: String) -> String? {
-        let SearchTermComponent = "%s"      //Placeholder in User Entered String
-        let placeholder = "{searchTerms}"   //Placeholder looked for when using Custom Search Engine in OpenSearch.swift
+        let SearchTermComponent = "%s"      // Placeholder in User Entered String
+        let placeholder = "{searchTerms}"   // Placeholder looked for when using Custom Search Engine in OpenSearch.swift
 
         if query.contains(SearchTermComponent) {
             return query.replacingOccurrences(of: SearchTermComponent, with: placeholder)
         }
         return nil
     }
-    
+
     func updateSaveButton() {
         let isEnabled = !self.engineTitle.isEmptyOrWhitespace() && !(self.urlString?.isEmptyOrWhitespace() ?? true)
         self.navigationItem.rightBarButtonItem?.isEnabled = isEnabled
     }
 
     override func generateSettings() -> [SettingSection] {
-
         func URLFromString(_ string: String?) -> URL? {
-            guard let string = string else {
-                return nil
-            }
+            guard let string = string else { return nil }
             return URL(string: string)
         }
 
-        let titleField = CustomSearchEngineTextView(placeholder: .SettingsAddCustomEngineTitlePlaceholder, settingIsValid: { text in
-            return text != nil && text != ""
-        }, settingDidChange: {fieldText in
-            guard let title = fieldText else {
-                return
-            }
-            self.engineTitle = title
-            self.updateSaveButton()
-        })
+        let titleField = CustomSearchEngineTextView(
+            placeholder: .SettingsAddCustomEngineTitlePlaceholder,
+            settingIsValid: { text in
+                if let text = text { return !text.isEmpty }
+
+                return false
+            }, settingDidChange: {fieldText in
+                guard let title = fieldText else { return }
+                self.engineTitle = title
+                self.updateSaveButton()
+            })
         titleField.textField.text = engineTitle
         titleField.textField.accessibilityIdentifier = "customEngineTitle"
 
-        let urlField = CustomSearchEngineTextView(placeholder: .SettingsAddCustomEngineURLPlaceholder, height: 133,
-            keyboardType: .URL, settingIsValid: { text in
-            //Can check url text text validity here.
-            return true
-        }, settingDidChange: {fieldText in
-            self.urlString = fieldText
-            self.updateSaveButton()
-        })
+        let urlField = CustomSearchEngineTextView(
+            placeholder: .SettingsAddCustomEngineURLPlaceholder,
+            height: 133,
+            keyboardType: .URL,
+            settingIsValid: { text in
+                // Can check url text text validity here.
+                return true
+            }, settingDidChange: {fieldText in
+                self.urlString = fieldText
+                self.updateSaveButton()
+            })
 
         urlField.textField.autocapitalizationType = .none
         urlField.textField.text = urlString
@@ -165,7 +182,7 @@ class CustomSearchViewController: SettingsTableViewController {
 
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .save, target: self, action: #selector(self.addCustomSearchEngine))
         self.navigationItem.rightBarButtonItem?.accessibilityIdentifier = "customEngineSaveButton"
-        
+
         self.navigationItem.rightBarButtonItem?.isEnabled = false
         return settings
     }
@@ -180,9 +197,8 @@ class CustomSearchViewController: SettingsTableViewController {
 }
 
 class CustomSearchEngineTextView: Setting, UITextViewDelegate {
-
     fileprivate let Padding: CGFloat = 8
-    fileprivate let TextLabelHeight: CGFloat = 44
+    fileprivate let TextLabelHeight: CGFloat = 36
     fileprivate var TextLabelWidth: CGFloat {
         let width = textField.frame.width == 0 ? 360 : textField.frame.width
         return width
@@ -198,7 +214,14 @@ class CustomSearchEngineTextView: Setting, UITextViewDelegate {
     let placeholderLabel = UILabel()
     var keyboardType: UIKeyboardType = .default
 
-    init(defaultValue: String? = nil, placeholder: String, height: CGFloat = 44, keyboardType: UIKeyboardType = .default, settingIsValid isValueValid: ((String?) -> Bool)? = nil, settingDidChange: ((String?) -> Void)? = nil) {
+    init(
+        defaultValue: String? = nil,
+        placeholder: String,
+        height: CGFloat = 44,
+        keyboardType: UIKeyboardType = .default,
+        settingIsValid isValueValid: ((String?) -> Bool)? = nil,
+        settingDidChange: ((String?) -> Void)? = nil
+    ) {
         self.defaultValue = defaultValue
         self.TextFieldHeight = height
         self.settingDidChange = settingDidChange
@@ -209,14 +232,14 @@ class CustomSearchEngineTextView: Setting, UITextViewDelegate {
         super.init(cellHeight: TextFieldHeight)
     }
 
-    override func onConfigureCell(_ cell: UITableViewCell) {
-        super.onConfigureCell(cell)
+    override func onConfigureCell(_ cell: UITableViewCell, theme: Theme) {
+        super.onConfigureCell(cell, theme: theme)
         if let id = accessibilityIdentifier {
             textField.accessibilityIdentifier = id + "TextField"
         }
 
         placeholderLabel.adjustsFontSizeToFitWidth = true
-        placeholderLabel.textColor = UIColor.theme.general.settingsTextPlaceholder
+        placeholderLabel.textColor = theme.colors.textSecondary
         placeholderLabel.text = placeholder
         placeholderLabel.isHidden = !textField.text.isEmpty
         placeholderLabel.frame = CGRect(width: TextLabelWidth, height: TextLabelHeight)
@@ -224,13 +247,13 @@ class CustomSearchEngineTextView: Setting, UITextViewDelegate {
 
         textField.textContainer.lineFragmentPadding = 0
         textField.keyboardType = keyboardType
-        if (keyboardType == .default) {
+        if keyboardType == .default {
             textField.autocapitalizationType = .words
         }
         textField.autocorrectionType = .no
         textField.delegate = self
-        textField.backgroundColor = UIColor.theme.tableView.rowBackground
-        textField.textColor = UIColor.theme.tableView.rowText
+        textField.backgroundColor = theme.colors.layer2
+        textField.textColor = theme.colors.textPrimary
         cell.isUserInteractionEnabled = true
         cell.accessibilityTraits = UIAccessibilityTraits.none
         cell.contentView.addSubview(textField)
@@ -238,6 +261,7 @@ class CustomSearchEngineTextView: Setting, UITextViewDelegate {
 
         textField.snp.makeConstraints { make in
             make.height.equalTo(TextFieldHeight)
+            make.top.bottom.equalTo(0).inset(Padding / 2)
             make.left.right.equalTo(cell.contentView).inset(Padding)
         }
     }
@@ -258,18 +282,18 @@ class CustomSearchEngineTextView: Setting, UITextViewDelegate {
     }
 
     func textViewDidBeginEditing(_ textView: UITextView) {
-        placeholderLabel.isHidden = textField.text != ""
+        placeholderLabel.isHidden = !textField.text.isEmpty
     }
 
     func textViewDidChange(_ textView: UITextView) {
-        placeholderLabel.isHidden = textField.text != ""
+        placeholderLabel.isHidden = !textField.text.isEmpty
         settingDidChange?(textView.text)
-        let color = isValid(textField.text) ? UIColor.theme.tableView.rowText : UIColor.theme.general.destructiveRed
+        let color = isValid(textField.text) ? theme.colors.textPrimary : theme.colors.textWarning
         textField.textColor = color
     }
 
     func textViewDidEndEditing(_ textView: UITextView) {
-        placeholderLabel.isHidden = textField.text != ""
+        placeholderLabel.isHidden = !textField.text.isEmpty
         settingDidChange?(textView.text)
     }
 }

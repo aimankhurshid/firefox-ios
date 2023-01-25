@@ -4,7 +4,6 @@
 
 import Foundation
 import Shared
-import XCGLogger
 
 open class SerializeRecordFailure<T: CleartextPayloadJSON>: MaybeErrorType, SyncPingFailureFormattable {
     public let record: Record<T>
@@ -22,9 +21,12 @@ open class SerializeRecordFailure<T: CleartextPayloadJSON>: MaybeErrorType, Sync
     }
 }
 
-private let log = Logger.syncLogger
+private struct UploadRecord {
+    let guid: GUID
+    let payload: String
+    let sizeBytes: Int
+}
 
-private typealias UploadRecord = (guid: GUID, payload: String, sizeBytes: Int)
 public typealias DeferredResponse = Deferred<Maybe<StorageResponse<POSTResult>>>
 
 typealias BatchUploadFunction = (_ lines: [String], _ ifUnmodifiedSince: Timestamp?, _ queryParams: [URLQueryItem]?) -> Deferred<Maybe<StorageResponse<POSTResult>>>
@@ -214,7 +216,7 @@ open class Sync15BatchClient<T: CleartextPayloadJSON> {
             return deferMaybe(RecordTooLargeError(size: lineSize, guid: record.id))
         }
 
-        return deferMaybe((record.id, line, lineSize))
+        return deferMaybe(UploadRecord(guid: record.id, payload: line, sizeBytes: lineSize))
     }
 
     fileprivate func addToPost(_ record: UploadRecord) -> Bool {

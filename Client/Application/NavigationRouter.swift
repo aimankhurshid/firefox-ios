@@ -7,7 +7,38 @@ import Shared
 import Glean
 
 struct FxALaunchParams {
+    let entrypoint: FxAEntrypoint
     var query: [String: String]
+}
+
+/// FxAEntrypoint represents all the possible reasons for the application
+/// could launch firefox accounts.
+/// Those entrypoints will be reflected in the authentication URL and will be tracked
+/// in telemetry to allow us to differentiate between flows
+///
+/// If you are introducing a new path to the firefox accounts sign in/settings flow
+/// please add a new entrypoint here
+enum FxAEntrypoint: String {
+    /// Tapping `Sync and Save Data` in the synced tabs menu when signed out
+    case homepanel = "homepanel"
+    /// Navigating to fxa through a deep-link
+    case fxaDeepLinkNavigation = "fxa-deep-link-navigation"
+    /// Using a deeplink, navigate to the fxa setting
+    case fxaDeepLinkSetting = "fxa-deep-link-setting"
+    /// Tapping on the `Sync and Save Data` in the hamburger main menu
+    case browserMenu = "browser-menu"
+    /// Sign in while undergoing update onboarding
+    case updateOnboarding = "update-onboarding"
+    /// Sign in while undergoing introduction onboarding
+    case introOnboarding = "intro-onboarding"
+    /// Tapping on the `Sync and Save Data` in the setting menu when not signed in
+    case connectSetting = "connect-setting"
+    /// Tapping on the FxA setting in the settings menu, when signed in, but need to be re-authenticated
+    case accountStatusSettingReauth = "account-status-setting-reauth"
+    /// When signed in, going through the settings menu to manage fxa settings
+    case manageFxASetting = "manage-fxa-setting"
+    /// Sign in/create account from the library panel
+    case libraryPanel = "library-panel"
 }
 
 // An enum to route to HomePanels
@@ -35,6 +66,7 @@ enum SettingsPage: String {
 }
 
 enum DefaultBrowserPath: String {
+    case tutorial = "tutorial"
     case systemSettings = "system-settings"
 }
 
@@ -44,13 +76,13 @@ enum DeepLink {
     case settings(SettingsPage)
     case homePanel(HomePanelPath)
     case defaultBrowser(DefaultBrowserPath)
-    
+
     init?(urlString: String) {
         let paths = urlString.split(separator: "/")
         guard let component = paths[safe: 0],
               let componentPath = paths[safe: 1]
         else { return nil }
-        
+
         if component == "settings", let link = SettingsPage(rawValue: String(componentPath)) {
             self = .settings(link)
         } else if component == "homepanel", let link = HomePanelPath(rawValue: String(componentPath)) {
@@ -88,35 +120,30 @@ enum NavigationPath {
          */
         func sanitizedURL(for unsanitized: URL) -> URL {
             guard var components = URLComponents(url: unsanitized, resolvingAgainstBaseURL: true),
-                  let scheme = components.scheme, !scheme.isEmpty else {
-                return unsanitized
-            }
+                  let scheme = components.scheme, !scheme.isEmpty
+            else { return unsanitized }
 
             components.scheme = scheme.lowercased()
             return components.url ?? unsanitized
         }
 
         let url = sanitizedURL(for: url)
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-
-        guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [AnyObject],
-            let urlSchemes = urlTypes.first?["CFBundleURLSchemes"] as? [String] else {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [AnyObject],
+              let urlSchemes = urlTypes.first?["CFBundleURLSchemes"] as? [String]
+        else {
             // Something very strange has happened; org.mozilla.Client should be the zeroeth URL type.
             return nil
         }
 
-        guard let scheme = components.scheme, urlSchemes.contains(scheme) else {
-            return nil
-        }
+        guard let scheme = components.scheme, urlSchemes.contains(scheme) else { return nil }
 
         let isOurScheme = [URL.mozPublicScheme, URL.mozInternalScheme].contains(scheme)
         if isOurScheme, let host = components.host?.lowercased(), !host.isEmpty {
             if host == "deep-link", let deepURL = components.valueForQuery("url"), let link = DeepLink(urlString: deepURL.lowercased()) {
                 self = .deepLink(link)
             } else if host == "fxa-signin", components.valueForQuery("signin") != nil {
-                self = .fxa(params: FxALaunchParams(query: url.getQuery()))
+                self = .fxa(params: FxALaunchParams(entrypoint: .fxaDeepLinkNavigation, query: url.getQuery()))
             } else if host == "open-url" {
                 self = .openUrlFromComponents(components: components)
             } else if let widgetKitNavPath = NavigationPath.handleWidgetKitQuery(components: components) {
@@ -129,14 +156,12 @@ enum NavigationPath {
             } else {
                 return nil
             }
-            
         } else if ["http", "https"].contains(scheme) {
             TelemetryWrapper.gleanRecordEvent(category: .action, method: .open, object: .asDefaultBrowser)
             RatingPromptManager.isBrowserDefault = true
             // Use the last browsing mode the user was in
             let isPrivate = UserDefaults.standard.bool(forKey: "wasLastSessionPrivate")
             self = .url(webURL: url, isPrivate: isPrivate)
-            
         } else {
             return nil
         }
@@ -144,12 +169,18 @@ enum NavigationPath {
 
     static func handle(nav: NavigationPath, with bvc: BrowserViewController) {
         switch nav {
-        case .fxa(let params): NavigationPath.handleFxA(params: params, with: bvc)
-        case .deepLink(let link): NavigationPath.handleDeepLink(link, with: bvc)
-        case .url(let url, let isPrivate): NavigationPath.handleURL(url: url, isPrivate: isPrivate, with: bvc)
-        case .text(let text): NavigationPath.handleText(text: text, with: bvc)
-        case .glean(let url): NavigationPath.handleGlean(url: url)
-        case .closePrivateTabs: NavigationPath.handleClosePrivateTabs(with: bvc)
+        case .fxa(let params):
+            NavigationPath.handleFxA(params: params, with: bvc)
+        case .deepLink(let link):
+            NavigationPath.handleDeepLink(link, with: bvc)
+        case .url(let url, let isPrivate):
+            NavigationPath.handleURL(url: url, isPrivate: isPrivate, with: bvc)
+        case .text(let text):
+            NavigationPath.handleText(text: text, with: bvc)
+        case .glean(let url):
+            NavigationPath.handleGlean(url: url)
+        case .closePrivateTabs:
+            NavigationPath.handleClosePrivateTabs(with: bvc)
         case .widgetUrl(webURL: let webURL, uuid: let uuid):
             NavigationPath.handleWidgetURL(url: webURL, uuid: uuid, with: bvc)
         }
@@ -159,10 +190,10 @@ enum NavigationPath {
         switch link {
         case .homePanel(let panelPath):
             NavigationPath.handleHomePanel(panel: panelPath, with: bvc)
-            
+
         case .settings(let settingsPath):
             guard let rootVC = bvc.navigationController else { return }
-            
+
             let settingsTableViewController = AppSettingsTableViewController(
                 with: bvc.profile,
                 and: bvc.tabManager,
@@ -172,16 +203,14 @@ enum NavigationPath {
                                           with: rootVC,
                                           baseSettingsVC: settingsTableViewController,
                                           and: bvc)
-            
+
         case .defaultBrowser(let path):
-            NavigationPath.handleDefaultBrowser(path: path)
+            NavigationPath.handleDefaultBrowser(path: path, with: bvc)
         }
     }
 
     private static func handleWidgetKitQuery(components: URLComponents) -> NavigationPath? {
-        guard let host = components.host?.lowercased(), !host.isEmpty else {
-            return nil
-        }
+        guard let host = components.host?.lowercased(), !host.isEmpty else { return nil }
         switch host {
         case "widget-medium-topsites-open-url":
             // Widget Top sites - open url
@@ -294,7 +323,6 @@ enum NavigationPath {
     }
 
     private static func handleSettings(settings: SettingsPage, with rootNav: UINavigationController, baseSettingsVC: AppSettingsTableViewController, and bvc: BrowserViewController) {
-
         guard let profile = baseSettingsVC.profile,
               let tabManager = baseSettingsVC.tabManager
         else { return }
@@ -329,23 +357,35 @@ enum NavigationPath {
             viewController.tabManager = tabManager
             controller.pushViewController(viewController, animated: true)
         case .fxa:
-            let viewController = FirefoxAccountSignInViewController.getSignInOrFxASettingsVC(flowType: .emailLoginFlow, referringPage: .settings, profile: bvc.profile)
+            let fxaParams = FxALaunchParams(entrypoint: .fxaDeepLinkSetting, query: [:])
+            let viewController = FirefoxAccountSignInViewController.getSignInOrFxASettingsVC(
+                fxaParams,
+                flowType: .emailLoginFlow,
+                referringPage: .settings,
+                profile: bvc.profile
+            )
             controller.pushViewController(viewController, animated: true)
         case .theme:
             controller.pushViewController(ThemeSettingsController(), animated: true)
-            
+
         case .wallpaper:
-            let viewModel = WallpaperSettingsViewModel(with: tabManager,
-                                                       and: WallpaperManager())
-            let wallpaperVC = WallpaperSettingsViewController(with: viewModel)
-            controller.pushViewController(wallpaperVC, animated: true)
+            let wallpaperManager = WallpaperManager()
+            if wallpaperManager.canSettingsBeShown {
+                let viewModel = WallpaperSettingsViewModel(wallpaperManager: wallpaperManager,
+                                                           tabManager: tabManager,
+                                                           theme: baseSettingsVC.themeManager.currentTheme)
+                let wallpaperVC = WallpaperSettingsViewController(viewModel: viewModel)
+                controller.pushViewController(wallpaperVC, animated: true)
+            }
         }
     }
 
-    private static func handleDefaultBrowser(path: DefaultBrowserPath) {
+    private static func handleDefaultBrowser(path: DefaultBrowserPath, with bvc: BrowserViewController) {
         switch path {
         case .systemSettings:
             UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!, options: [:])
+        case .tutorial:
+            bvc.presentDBOnboardingViewController(true)
         }
     }
 }
@@ -381,4 +421,3 @@ func == (lhs: DeepLink, rhs: DeepLink) -> Bool {
         return false
     }
 }
-

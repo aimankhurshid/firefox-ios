@@ -3,15 +3,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0
 
 import Foundation
+import Shared
 
 struct EnhancedTrackingProtectionDetailsVM {
     let topLevelDomain: String
     let title: String
-    let image: UIImage
     let URL: String
 
-    let lockIcon: UIImage
+    let getLockIcon: (ThemeType) -> UIImage
     let connectionStatusMessage: String
-    let connectionVerifier: String
     let connectionSecure: Bool
 }

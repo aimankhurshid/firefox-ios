@@ -50,7 +50,7 @@ class TabContentBlocker {
 
     var stats: TPPageStats = TPPageStats() {
         didSet {
-            guard let _ = self.tab else { return }
+            guard self.tab != nil else { return }
             if stats.total <= 1 {
                 notifyContentBlockingChanged()
             }
@@ -61,7 +61,7 @@ class TabContentBlocker {
         self.tab = tab
         NotificationCenter.default.addObserver(self, selector: #selector(notifiedTabSetupRequired), name: .contentBlockerTabSetupRequired, object: nil)
     }
-    
+
     func scriptMessageHandlerName() -> String? {
         return "trackingProtectionStats"
     }

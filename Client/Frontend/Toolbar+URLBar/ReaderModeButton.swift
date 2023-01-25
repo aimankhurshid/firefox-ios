@@ -5,7 +5,6 @@
 import UIKit
 
 class ReaderModeButton: UIButton {
-
     // MARK: - Initializers
 
     override init(frame: CGRect) {
@@ -13,7 +12,7 @@ class ReaderModeButton: UIButton {
         adjustsImageWhenHighlighted = false
         setImage(UIImage.templateImageNamed("reader"), for: .normal)
         imageView?.contentMode = .scaleAspectFit
-        contentHorizontalAlignment = .left
+        contentHorizontalAlignment = .center
         applyTheme()
     }
 
@@ -22,7 +21,7 @@ class ReaderModeButton: UIButton {
     }
 
     // MARK: - Variables
-    
+
     var selectedTintColor: UIColor?
     var unselectedTintColor: UIColor?
 

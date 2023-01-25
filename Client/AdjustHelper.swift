@@ -5,16 +5,31 @@
 import Foundation
 import Adjust
 import Shared
+import Glean
 
 private let log = Logger.browserLogger
 
-final class AdjustHelper {
-
+final class AdjustHelper: FeatureFlaggable {
     private static let adjustAppTokenKey = "AdjustAppToken"
     private let profile: Profile
+    private let telemetryHelper: AdjustTelemetryProtocol
 
-    init(profile: Profile) {
+    init(profile: Profile,
+         telemetryHelper: AdjustTelemetryProtocol = AdjustTelemetryHelper()) {
         self.profile = profile
+        self.telemetryHelper = telemetryHelper
+        let sendUsageData = profile.prefs.boolForKey(AppConstants.PrefSendUsageData) ?? true
+
+        // This is required for adjust to work properly with ASA and we avoid directly disabling
+        // third-party sharing as there is a specific method provided to us by adjust for that.
+        // Note: These settings are persisted on the adjust backend as well
+        if sendUsageData {
+            if let adjustThirdPartySharing = ADJThirdPartySharing(isEnabledNumberBool: true) {
+                Adjust.trackThirdPartySharing(adjustThirdPartySharing)
+            }
+        } else {
+            Adjust.disableThirdPartySharing()
+        }
     }
 
     func setupAdjust() {
@@ -27,13 +42,13 @@ final class AdjustHelper {
         AdjustHelper.setEnabled(shouldEnable)
     }
 
-    /// Used to enable or disable Adjust SDK and it's features. We disable third party sharing by default.
+    /// Used to enable or disable Adjust SDK and it's features.
     /// If user has disabled Send Anonymous Usage Data then we ask Adjust to erase the user's data as well.
     static func setEnabled(_ enabled: Bool) {
-        Adjust.disableThirdPartySharing()
         Adjust.setEnabled(enabled)
 
         if !enabled {
+            Adjust.disableThirdPartySharing()
             Adjust.gdprForgetMe()
         }
     }
@@ -47,7 +62,7 @@ final class AdjustHelper {
             return nil
         }
 
-        let isProd = FeatureFlagsManager.shared.isFeatureActiveForBuild(.adjustEnvironmentProd)
+        let isProd = featureFlags.isCoreFeatureEnabled(.adjustEnvironmentProd)
         let environment = isProd ? ADJEnvironmentProduction : ADJEnvironmentSandbox
         let config = ADJConfig(appToken: appToken, environment: environment)
         config?.logLevel = isProd ? ADJLogLevelSuppress : ADJLogLevelDebug
@@ -79,7 +94,6 @@ final class AdjustHelper {
 
 // MARK: - AdjustDelegate
 extension AdjustHelper: AdjustDelegate {
-
     /// This is called when Adjust has figured out the attribution. It will call us with a summary
     /// of all the things it knows. Like the campaign ID. We simply save a boolean that attribution
     /// has changed so we know the single attribution ping to Adjust was done.
@@ -90,5 +104,16 @@ extension AdjustHelper: AdjustDelegate {
         if !shouldEnable {
             AdjustHelper.setEnabled(false)
         }
+
+        telemetryHelper.setAttributionData(attribution)
+    }
+
+    func adjustDeeplinkResponse(_ deeplink: URL?) -> Bool {
+        guard let url = deeplink else { return true }
+
+        // Send telemetry if url is not nil
+        let attribution = Adjust.attribution()
+        telemetryHelper.sendDeeplinkTelemetry(url: url, attribution: attribution)
+        return true
     }
 }

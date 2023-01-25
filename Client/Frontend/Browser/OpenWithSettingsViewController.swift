@@ -6,7 +6,12 @@ import Foundation
 import Shared
 
 class OpenWithSettingsViewController: ThemedTableViewController {
-    typealias MailtoProviderEntry = (name: String, scheme: String, enabled: Bool)
+    struct MailtoProviderEntry {
+        let name: String
+        let scheme: String
+        let enabled: Bool
+    }
+
     var mailProviderSource = [MailtoProviderEntry]()
 
     fileprivate let prefs: Prefs
@@ -26,16 +31,13 @@ class OpenWithSettingsViewController: ThemedTableViewController {
         title = .SettingsOpenWithSectionName
 
         tableView.accessibilityIdentifier = "OpenWithPage.Setting.Options"
+        tableView.register(ThemedTableSectionHeaderFooterView.self,
+                           forHeaderFooterViewReuseIdentifier: ThemedTableSectionHeaderFooterView.cellIdentifier)
 
-        let headerFooterFrame = CGRect(width: self.view.frame.width, height: SettingsUX.TableViewHeaderFooterHeight)
-        let headerView = ThemedTableSectionHeaderFooterView(frame: headerFooterFrame)
-        headerView.titleLabel.text = .SettingsOpenWithPageTitle.uppercased()
-        let footerView = ThemedTableSectionHeaderFooterView(frame: headerFooterFrame)
-
-        tableView.tableHeaderView = headerView
-        tableView.tableFooterView = footerView
-
-        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(appDidBecomeActive),
+                                               name: UIApplication.didBecomeActiveNotification,
+                                               object: nil)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -57,9 +59,9 @@ class OpenWithSettingsViewController: ThemedTableViewController {
     func updateCurrentChoice() {
         var previousChoiceAvailable: Bool = false
         if let prefMailtoScheme = self.prefs.stringForKey(PrefsKeys.KeyMailToOption) {
-            mailProviderSource.forEach({ (name, scheme, enabled) in
-                if scheme == prefMailtoScheme {
-                    previousChoiceAvailable = enabled
+            mailProviderSource.forEach({ item in
+                if item.scheme == prefMailtoScheme {
+                    previousChoiceAvailable = item.enabled
                 }
             })
         }
@@ -74,11 +76,17 @@ class OpenWithSettingsViewController: ThemedTableViewController {
     }
 
     func reloadMailProviderSource() {
-        if let path = Bundle.main.path(forResource: "MailSchemes", ofType: "plist"), let dictRoot = NSArray(contentsOfFile: path) {
-            mailProviderSource = dictRoot.map {  dict in
-                let nsDict = dict as! NSDictionary
-                return (name: nsDict["name"] as! String, scheme: nsDict["scheme"] as! String,
-                        enabled: canOpenMailScheme(nsDict["scheme"] as! String))
+        if let path = Bundle.main.path(forResource: "MailSchemes", ofType: "plist"),
+           let dictRoot = NSArray(contentsOfFile: path) {
+            mailProviderSource = dictRoot.compactMap { dict in
+                guard let nsDict = dict as? NSDictionary,
+                      let name = nsDict["name"] as? String,
+                      let scheme = nsDict["scheme"] as? String
+                else { return nil }
+
+                return (MailtoProviderEntry(name: name,
+                                            scheme: scheme,
+                                            enabled: canOpenMailScheme(scheme)))
             }
         }
     }
@@ -94,6 +102,7 @@ class OpenWithSettingsViewController: ThemedTableViewController {
         let cell = ThemedTableViewCell()
         let option = mailProviderSource[indexPath.row]
 
+        cell.applyTheme(theme: themeManager.currentTheme)
         cell.textLabel?.attributedText = NSAttributedString.tableRowTitle(option.name, enabled: option.enabled)
         cell.accessoryType = (currentChoice == option.scheme && option.enabled) ? .checkmark : .none
         cell.isUserInteractionEnabled = option.enabled
@@ -108,5 +117,25 @@ class OpenWithSettingsViewController: ThemedTableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         self.currentChoice = mailProviderSource[indexPath.row].scheme
         tableView.reloadData()
+    }
+
+    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+        guard let headerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: ThemedTableSectionHeaderFooterView.cellIdentifier) as? ThemedTableSectionHeaderFooterView else { return nil }
+
+        headerView.titleLabel.text = .SettingsOpenWithPageTitle.uppercased()
+        return headerView
+    }
+
+    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        return UITableView.automaticDimension
+    }
+
+    override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
+        guard let footerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: ThemedTableSectionHeaderFooterView.cellIdentifier) as? ThemedTableSectionHeaderFooterView else { return nil }
+        return footerView
+    }
+
+    override func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat {
+        return UITableView.automaticDimension
     }
 }

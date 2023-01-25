@@ -6,16 +6,17 @@ import Foundation
 import StoreKit
 import Shared
 import Storage
+import Common
 
 // The `RatingPromptManager` handles app store review requests and the internal logic of when they can be presented to a user.
 final class RatingPromptManager {
-
     private let profile: Profile
     private let daysOfUseCounter: CumulativeDaysOfUseCounter
 
     private var hasMinimumMobileBookmarksCount = false
     private let minimumMobileBookmarksCount = 5
     private let sentry: SentryProtocol?
+    private let group: DispatchGroupInterface
 
     private let dataQueue = DispatchQueue(label: "com.moz.ratingPromptManager.queue")
 
@@ -33,10 +34,12 @@ final class RatingPromptManager {
     ///   - sentry: Sentry protocol to override in Unit test
     init(profile: Profile,
          daysOfUseCounter: CumulativeDaysOfUseCounter = CumulativeDaysOfUseCounter(),
-         sentry: SentryProtocol = Sentry.shared) {
+         sentry: SentryProtocol = SentryIntegration.shared,
+         group: DispatchGroupInterface = DispatchGroup()) {
         self.profile = profile
         self.daysOfUseCounter = daysOfUseCounter
         self.sentry = sentry
+        self.group = group
     }
 
     /// Show the in-app rating prompt if needed
@@ -52,7 +55,6 @@ final class RatingPromptManager {
     func updateData(dataLoadingCompletion: (() -> Void)? = nil) {
         daysOfUseCounter.updateCounter()
 
-        let group = DispatchGroup()
         updateBookmarksCount(group: group)
 
         group.notify(queue: dataQueue) {
@@ -127,10 +129,21 @@ final class RatingPromptManager {
         lastRequestDate = date
         requestCount += 1
 
-        SKStoreReviewController.requestReview()
+        guard #available(iOS 14, *) else {
+            SKStoreReviewController.requestReview()
+            return
+        }
+
+        guard let scene = UIApplication.shared.connectedScenes.first(where: {
+            $0.activationState == .foregroundActive
+        }) as? UIWindowScene else { return }
+
+        DispatchQueue.main.async {
+            SKStoreReviewController.requestReview(in: scene)
+        }
     }
 
-    private func updateBookmarksCount(group: DispatchGroup) {
+    private func updateBookmarksCount(group: DispatchGroupInterface) {
         group.enter()
         profile.places.getBookmarksTree(rootGUID: BookmarkRoots.MobileFolderGUID, recursive: false).uponQueue(.main) { [weak self] result in
             guard let strongSelf = self,

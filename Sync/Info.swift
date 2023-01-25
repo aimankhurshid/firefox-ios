@@ -54,7 +54,6 @@ open class InfoCollections {
 
 // Response object from https://<sync-endpoint-url>/info/configuration
 public struct InfoConfiguration {
-
     // Maximum size in bytes of the overall HTTP request body.
     public let maxRequestBytes: Int
 
@@ -72,4 +71,3 @@ public struct InfoConfiguration {
     // as part of a batched upload.
     public let maxTotalBytes: Int
 }
-

@@ -16,7 +16,6 @@ public enum NSFileManagerExtensionsErrorCodes: Int {
 }
 
 public extension FileManager {
-
     private func directoryEnumerator(for url: URL) throws -> FileManager.DirectoryEnumerator {
         let prefetchedProperties: [URLResourceKey] = [.isRegularFileKey, .fileAllocatedSizeKey, .totalFileAllocatedSizeKey]
 
@@ -27,15 +26,15 @@ public extension FileManager {
             return false
         }
 
-        guard let directoryEnumerator = FileManager.default.enumerator(at: url,
+        guard let directoryEnumerator = FileManager.default.enumerator(
+            at: url,
             includingPropertiesForKeys: prefetchedProperties,
             options: [],
-            errorHandler: errorHandler) else {
-            throw errorWithCode(.enumeratorFailure)
-        }
+            errorHandler: errorHandler)
+        else { throw errorWithCode(.enumeratorFailure) }
 
         // Bail out if we encountered an issue getting the enumerator.
-        if let _ = enumeratorError {
+        if let enumeratorError = enumeratorError {
             throw errorWithCode(.errorEnumeratingDirectory, underlyingError: enumeratorError)
         }
 
@@ -96,7 +95,7 @@ public extension FileManager {
 
     private func errorWithCode(_ code: NSFileManagerExtensionsErrorCodes, underlyingError error: NSError? = nil) -> NSError {
         var userInfo = [String: AnyObject]()
-        if let _ = error {
+        if let error = error {
             userInfo[NSUnderlyingErrorKey] = error
         }
 

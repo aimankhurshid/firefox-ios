@@ -5,7 +5,6 @@
 import Foundation
 
 class LockButton: UIButton {
-
     // MARK: - Variables
 
     var selectedTintColor: UIColor!
@@ -37,7 +36,7 @@ class LockButton: UIButton {
         applyTheme()
 
         clipsToBounds = false
-        setImage(UIImage.templateImageNamed("lock_verified"), for: .normal)
+        setImage(UIImage.templateImageNamed(ImageIdentifiers.lockVerifed), for: .normal)
         imageView?.contentMode = .scaleAspectFill
         adjustsImageWhenHighlighted = false
     }

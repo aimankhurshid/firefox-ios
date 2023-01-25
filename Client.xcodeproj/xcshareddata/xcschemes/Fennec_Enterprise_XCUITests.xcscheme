@@ -194,17 +194,29 @@
       </CommandLineArguments>
       <TestPlans>
          <TestPlanReference
-            reference = "container:XCUITests/Fennec_Enterprise_XCUITests.xctestplan"
+            reference = "container:Tests/Fennec_Enterprise_XCUITests.xctestplan"
             default = "YES">
          </TestPlanReference>
          <TestPlanReference
-            reference = "container:XCUITests/PerformanceTestPlan.xctestplan">
+            reference = "container:Tests/PerformanceTestPlan.xctestplan">
          </TestPlanReference>
          <TestPlanReference
-            reference = "container:XCUITests/SyncIntegrationTestPlan.xctestplan">
+            reference = "container:Tests/SyncIntegrationTestPlan.xctestplan">
          </TestPlanReference>
          <TestPlanReference
-            reference = "container:XCUITests/SmokeXCUITests.xctestplan">
+            reference = "container:Tests/SmokeXCUITests.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Tests/Smoketest2.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Tests/UnitTest.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Tests/Smoketest3.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Tests/Smoketest4.xctestplan">
          </TestPlanReference>
       </TestPlans>
       <Testables>
@@ -292,6 +304,9 @@
                </Test>
                <Test
                   Identifier = "IntegrationTests/testFxASyncBookmark()">
+               </Test>
+               <Test
+                  Identifier = "JumpBackInTests">
                </Test>
                <Test
                   Identifier = "NavigationTest/testLongPressLinkOptions()">
@@ -504,14 +519,5 @@
    <ArchiveAction
       buildConfiguration = "Fennec"
       revealArchiveInOrganizer = "YES">
-      <PreActions>
-         <ExecutionAction
-            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
-            <ActionContent
-               title = "Run Script"
-               scriptText = "/usr/local/bin/carthage checkout">
-            </ActionContent>
-         </ExecutionAction>
-      </PreActions>
    </ArchiveAction>
 </Scheme>

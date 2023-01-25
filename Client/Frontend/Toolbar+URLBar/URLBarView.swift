@@ -46,9 +46,21 @@ protocol URLBarDelegate: AnyObject {
     // Returns either (search query, true) or (url, false).
     func urlBarDisplayTextForURL(_ url: URL?) -> (String?, Bool)
     func urlBarDidBeginDragInteraction(_ urlBar: URLBarView)
+    func urlBarDidPressShare(_ urlBar: URLBarView, shareView: UIView)
 }
 
-class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
+protocol URLBarViewProtocol {
+    var inOverlayMode: Bool { get }
+    func leaveOverlayMode(didCancel cancel: Bool)
+}
+
+extension URLBarViewProtocol {
+    func leaveOverlayMode(didCancel cancel: Bool = false) {
+        leaveOverlayMode(didCancel: cancel)
+    }
+}
+
+class URLBarView: UIView, URLBarViewProtocol, AlphaDimmable, TopBottomInterchangeable {
     // Additional UIAppearance-configurable properties
     @objc dynamic var locationBorderColor: UIColor = URLBarViewUX.TextFieldBorderColor {
         didSet {
@@ -110,7 +122,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
 
     lazy var tabsButton: TabsButton = {
         let tabsButton = TabsButton.tabTrayButton()
-        tabsButton.accessibilityIdentifier = "URLBarView.tabsButton"
+        tabsButton.accessibilityIdentifier = AccessibilityIdentifiers.Browser.UrlBar.tabsButton
         tabsButton.inTopTabs = false
         return tabsButton
     }()
@@ -123,8 +135,10 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
 
     fileprivate lazy var cancelButton: UIButton = {
         let cancelButton = InsetButton()
-        cancelButton.setImage(UIImage.templateImageNamed("goBack")?.imageFlippedForRightToLeftLayoutDirection(), for: .normal)
-        cancelButton.accessibilityIdentifier = "urlBar-cancel"
+        cancelButton.setImage(
+            UIImage.templateImageNamed(ImageIdentifiers.menuGoBack)?.imageFlippedForRightToLeftLayoutDirection(),
+            for: .normal)
+        cancelButton.accessibilityIdentifier = AccessibilityIdentifiers.Browser.UrlBar.cancelButton
         cancelButton.accessibilityLabel = AccessibilityIdentifiers.GeneralizedIdentifiers.back
         cancelButton.addTarget(self, action: #selector(didClickCancel), for: .touchUpInside)
         cancelButton.alpha = 0
@@ -133,8 +147,8 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
 
     fileprivate lazy var showQRScannerButton: InsetButton = {
         let button = InsetButton()
-        button.setImage(UIImage.templateImageNamed("menu-ScanQRCode"), for: .normal)
-        button.accessibilityIdentifier = "urlBar-scanQRCode"
+        button.setImage(UIImage.templateImageNamed(ImageIdentifiers.menuScanQRCode), for: .normal)
+        button.accessibilityIdentifier = AccessibilityIdentifiers.Browser.UrlBar.scanQRCodeButton
         button.accessibilityLabel = .ScanQRCodeViewTitle
         button.clipsToBounds = false
         button.addTarget(self, action: #selector(showQRScanner), for: .touchUpInside)
@@ -160,7 +174,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         searchIconImageView.clipsToBounds = true
         return searchIconImageView
     }()
-    
+
     var appMenuButton = ToolbarButton()
     var bookmarksButton = ToolbarButton()
     var homeButton = ToolbarButton()
@@ -170,11 +184,19 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
 
     var backButton: ToolbarButton = {
         let backButton = ToolbarButton()
-        backButton.accessibilityIdentifier = "URLBarView.backButton"
+        backButton.accessibilityIdentifier = AccessibilityIdentifiers.Browser.UrlBar.backButton
         return backButton
     }()
 
-    lazy var actionButtons: [NotificationThemeable & UIButton] = [self.tabsButton, self.homeButton, self.bookmarksButton, self.appMenuButton, self.addNewTabButton, self.forwardButton, self.backButton, self.multiStateButton]
+    lazy var actionButtons: [NotificationThemeable & UIButton] = [
+        self.tabsButton,
+        self.homeButton,
+        self.bookmarksButton,
+        self.appMenuButton,
+        self.addNewTabButton,
+        self.forwardButton,
+        self.backButton,
+        self.multiStateButton]
 
     var currentURL: URL? {
         get {
@@ -191,14 +213,13 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         }
     }
 
-    var profile: Profile? = nil
-    private var isBottomSearchBar: Bool {
-        BrowserViewController.foregroundBVC().isBottomSearchBar
-    }
-    
-    fileprivate let privateModeBadge = BadgeWithBackdrop(imageName: "privateModeBadge", backdropCircleColor: UIColor.Defaults.MobilePrivatePurple)
-    fileprivate let appMenuBadge = BadgeWithBackdrop(imageName: "menuBadge")
-    fileprivate let warningMenuBadge = BadgeWithBackdrop(imageName: "menuWarning", imageMask: "warning-mask")
+    var profile: Profile
+
+    fileprivate let privateModeBadge = BadgeWithBackdrop(imageName: ImageIdentifiers.privateModeBadge,
+                                                         backdropCircleColor: UIColor.Defaults.MobilePrivatePurple)
+    fileprivate let appMenuBadge = BadgeWithBackdrop(imageName: ImageIdentifiers.menuBadge)
+    fileprivate let warningMenuBadge = BadgeWithBackdrop(imageName: ImageIdentifiers.menuWarning,
+                                                         imageMask: ImageIdentifiers.menuWarningMask)
 
     init(profile: Profile) {
         self.profile = profile
@@ -207,19 +228,17 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         commonInit()
     }
 
-    required init?(coder aDecoder: NSCoder) {
-        super.init(coder: aDecoder)
-        commonInit()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
     func updateSearchEngineImage() {
-        guard let profile = profile else { return }
         self.searchIconImageView.image = profile.searchEngines.defaultEngine.image
     }
 
     fileprivate func commonInit() {
         locationContainer.addSubview(locationView)
-        
+
         [scrollToTopButton, line, tabsButton, progressBar, cancelButton, showQRScannerButton,
          homeButton, bookmarksButton, appMenuButton, addNewTabButton, forwardButton, backButton,
          multiStateButton, locationContainer, searchIconImageView].forEach {
@@ -227,7 +246,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         }
 
         updateSearchEngineImage()
-        
+
         privateModeBadge.add(toParent: self)
         appMenuBadge.add(toParent: self)
         warningMenuBadge.add(toParent: self)
@@ -240,7 +259,6 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
     }
 
     fileprivate func setupConstraints() {
-
         scrollToTopButton.snp.makeConstraints { make in
             make.top.equalTo(self)
             make.left.right.equalTo(locationContainer)
@@ -267,7 +285,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
             make.centerY.equalTo(self)
             make.size.equalTo(URLBarViewUX.ButtonHeight)
         }
-        
+
         searchIconImageView.snp.remakeConstraints { make in
             let heightMin = URLBarViewUX.LocationHeight + (URLBarViewUX.TextFieldBorderWidthSelected * 2)
             make.height.greaterThanOrEqualTo(heightMin)
@@ -299,7 +317,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
             make.centerY.equalTo(self)
             make.size.equalTo(URLBarViewUX.ButtonHeight)
         }
-        
+
         addNewTabButton.snp.makeConstraints { make in
             make.trailing.equalTo(self.tabsButton.snp.leading)
             make.centerY.equalTo(self)
@@ -317,7 +335,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
             make.centerY.equalTo(self.locationContainer)
             make.size.equalTo(URLBarViewUX.ButtonHeight)
         }
-        
+
         privateModeBadge.layout(onButton: tabsButton)
         appMenuBadge.layout(onButton: appMenuButton)
         warningMenuBadge.layout(onButton: appMenuButton)
@@ -389,7 +407,6 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
                 make.edges.equalTo(self.locationContainer).inset(UIEdgeInsets(equalInset: URLBarViewUX.TextFieldBorderWidth))
             }
         }
-
     }
 
     @objc func showQRScanner() {
@@ -414,7 +431,7 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         locationTextField.returnKeyType = .go
         locationTextField.clearButtonMode = .whileEditing
         locationTextField.textAlignment = .left
-        locationTextField.accessibilityIdentifier = "address"
+        locationTextField.accessibilityIdentifier = AccessibilityIdentifiers.Browser.UrlBar.searchTextField
         locationTextField.accessibilityLabel = .URLBarLocationAccessibilityLabel
         locationTextField.attributedPlaceholder = self.locationView.placeholder
         locationContainer.addSubview(locationTextField)
@@ -497,6 +514,8 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
     }
 
     func enterOverlayMode(_ locationText: String?, pasted: Bool, search: Bool) {
+        guard !inOverlayMode else { return }
+
         createLocationTextField()
 
         // Show the overlay mode UI, which includes hiding the locationView and replacing it
@@ -530,7 +549,9 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         }
     }
 
-    func leaveOverlayMode(didCancel cancel: Bool = false) {
+    func leaveOverlayMode(didCancel cancel: Bool) {
+        guard inOverlayMode else { return }
+
         locationTextField?.resignFirstResponder()
         animateToOverlayState(overlayMode: false, didCancel: cancel)
         delegate?.urlBarDidLeaveOverlayMode(self)
@@ -604,12 +625,11 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
         // badge isHidden is tied to private mode on/off, use alpha to hide in this case
         [privateModeBadge, appMenuBadge, warningMenuBadge].forEach {
             $0.badge.alpha = (!toolbarIsShowing || inOverlayMode) ? 0 : 1
-            $0.backdrop.alpha = (!toolbarIsShowing || inOverlayMode) ? 0 : BadgeWithBackdrop.backdropAlpha
+            $0.backdrop.alpha = (!toolbarIsShowing || inOverlayMode) ? 0 : BadgeWithBackdrop.UX.backdropAlpha
         }
-        
     }
 
-    func animateToOverlayState(overlayMode overlay: Bool, didCancel cancel: Bool = false) {
+    private func animateToOverlayState(overlayMode overlay: Bool, didCancel cancel: Bool = false) {
         prepareOverlayAnimation()
         layoutIfNeeded()
 
@@ -619,20 +639,26 @@ class URLBarView: UIView, AlphaDimmable, TopBottomInterchangeable {
             removeLocationTextField()
         }
 
-        UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.0, options: [], animations: {
-            self.transitionToOverlay(cancel)
-            self.setNeedsUpdateConstraints()
-            self.layoutIfNeeded()
-        }, completion: { _ in
-            self.updateViewsForOverlayModeAndToolbarChanges()
-        })
+        UIView.animate(
+            withDuration: 0.3,
+            delay: 0.0,
+            usingSpringWithDamping: 0.85,
+            initialSpringVelocity: 0.0,
+            options: [],
+            animations: {
+                self.transitionToOverlay(cancel)
+                self.setNeedsUpdateConstraints()
+                self.layoutIfNeeded()
+            }, completion: { _ in
+                self.updateViewsForOverlayModeAndToolbarChanges()
+            })
     }
 
     func didClickAddTab() {
         delegate?.urlBarDidPressTabs(self)
     }
 
-    @objc func didClickCancel() {
+    @objc private func didClickCancel() {
         leaveOverlayMode(didCancel: true)
     }
 
@@ -650,9 +676,7 @@ extension URLBarView: TabToolbarProtocol {
 
     func appMenuBadge(setVisible: Bool) {
         // Warning badges should take priority over the standard badge
-        guard warningMenuBadge.badge.isHidden else {
-            return
-        }
+        guard warningMenuBadge.badge.isHidden else { return }
 
         appMenuBadge.show(setVisible)
     }
@@ -681,7 +705,8 @@ extension URLBarView: TabToolbarProtocol {
 
     func updatePageStatus(_ isWebPage: Bool) {
         if UIDevice.current.userInterfaceIdiom == .pad {
-            multiStateButton.isEnabled = isWebPage
+            // the button should be always enabled so that the search button is enabled on the homepage
+            multiStateButton.isEnabled = true
         }
     }
 
@@ -730,7 +755,7 @@ extension URLBarView: TabLocationViewDelegate {
 
     func tabLocationViewDidTapReload(_ tabLocationView: TabLocationView) {
         let state = locationView.reloadButton.isHidden ? .reload : locationView.reloadButton.reloadButtonState
-        
+
         switch state {
         case .reload:
             delegate?.urlBarDidPressReload(self)
@@ -749,6 +774,10 @@ extension URLBarView: TabLocationViewDelegate {
 
     func tabLocationViewDidTapReaderMode(_ tabLocationView: TabLocationView) {
         delegate?.urlBarDidPressReaderMode(self)
+    }
+
+    func tabLocationViewDidTapShare(_ tabLocationView: TabLocationView, button: UIButton) {
+        delegate?.urlBarDidPressShare(self, shareView: button)
     }
 
     func tabLocationViewLocationAccessibilityActions(_ tabLocationView: TabLocationView) -> [UIAccessibilityCustomAction]? {
@@ -797,7 +826,6 @@ extension URLBarView: AutocompleteTextFieldDelegate {
 
 // MARK: UIAppearance
 extension URLBarView {
-
     @objc dynamic var cancelTintColor: UIColor? {
         get { return cancelButton.tintColor }
         set { return cancelButton.tintColor = newValue }
@@ -807,7 +835,6 @@ extension URLBarView {
         get { return showQRScannerButton.tintColor }
         set { return showQRScannerButton.tintColor = newValue }
     }
-
 }
 
 // MARK: - NotificationThemeable
@@ -841,11 +868,15 @@ extension URLBarView: PrivateModeUI {
         if UIDevice.current.userInterfaceIdiom != .pad {
             privateModeBadge.show(isPrivate)
         }
-        
+
         locationActiveBorderColor = UIColor.theme.urlbar.activeBorder(isPrivate)
-        progressBar.setGradientColors(startColor: UIColor.theme.loadingBar.start(isPrivate), endColor: UIColor.theme.loadingBar.end(isPrivate))
+        progressBar.setGradientColors(startColor: UIColor.theme.loadingBar.start(isPrivate),
+                                      middleColor: UIColor.theme.loadingBar.middle(isPrivate),
+                                      endColor: UIColor.theme.loadingBar.end(isPrivate))
         ToolbarTextField.applyUIMode(isPrivate: isPrivate)
 
         applyTheme()
     }
 }
+
+extension URLBarView: SearchBarLocationProvider {}

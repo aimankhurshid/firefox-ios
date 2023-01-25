@@ -9,7 +9,9 @@ extension BrowserViewController: DownloadQueueDelegate {
     func downloadQueue(_ downloadQueue: DownloadQueue, didStartDownload download: Download) {
         // If no other download toast is shown, create a new download toast and show it.
         guard let downloadToast = self.downloadToast else {
-            let downloadToast = DownloadToast(download: download, completion: { buttonPressed in
+            let downloadToast = DownloadToast(download: download,
+                                              theme: themeManager.currentTheme,
+                                              completion: { buttonPressed in
                 // When this toast is dismissed, be sure to clear this so that any
                 // subsequent downloads cause a new toast to be created.
                 self.downloadToast = nil
@@ -18,9 +20,9 @@ extension BrowserViewController: DownloadQueueDelegate {
                 if buttonPressed, !downloadQueue.isEmpty {
                     downloadQueue.cancelAll()
 
-                    let downloadCancelledToast = ButtonToast(labelText: .DownloadCancelledToastLabelText, backgroundColor: UIColor.Photon.Grey60, textAlignment: .center)
-
-                    self.show(toast: downloadCancelledToast)
+                    SimpleToast().showAlertWithText(.DownloadCancelledToastLabelText,
+                                                    bottomContainer: self.webViewContainer,
+                                                    theme: self.themeManager.currentTheme)
                 }
             })
 
@@ -41,15 +43,20 @@ extension BrowserViewController: DownloadQueueDelegate {
     }
 
     func downloadQueue(_ downloadQueue: DownloadQueue, didCompleteWithError error: Error?) {
-        guard let downloadToast = self.downloadToast, let download = downloadToast.downloads.first else {
-            return
-        }
+        guard let downloadToast = self.downloadToast,
+              let download = downloadToast.downloads.first
+        else { return }
 
         DispatchQueue.main.async {
             downloadToast.dismiss(false)
 
             if error == nil {
-                let downloadCompleteToast = ButtonToast(labelText: download.filename, imageName: "check", buttonText: .DownloadsButtonTitle, completion: { buttonPressed in
+                let viewModel = ButtonToastViewModel(labelText: download.filename,
+                                                     imageName: ImageIdentifiers.check,
+                                                     buttonText: .DownloadsButtonTitle)
+                let downloadCompleteToast = ButtonToast(viewModel: viewModel,
+                                                        theme: self.themeManager.currentTheme,
+                                                        completion: { buttonPressed in
                     guard buttonPressed else { return }
 
                     self.showLibrary(panel: .downloads)
@@ -58,9 +65,9 @@ extension BrowserViewController: DownloadQueueDelegate {
 
                 self.show(toast: downloadCompleteToast, duration: DispatchTimeInterval.seconds(8))
             } else {
-                let downloadFailedToast = ButtonToast(labelText: .DownloadFailedToastLabelText, backgroundColor: UIColor.Photon.Grey60, textAlignment: .center)
-
-                self.show(toast: downloadFailedToast, duration: nil)
+                SimpleToast().showAlertWithText(.DownloadCancelledToastLabelText,
+                                                bottomContainer: self.webViewContainer,
+                                                theme: self.themeManager.currentTheme)
             }
         }
     }

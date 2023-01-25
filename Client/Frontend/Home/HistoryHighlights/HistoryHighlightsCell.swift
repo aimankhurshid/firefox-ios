@@ -3,80 +3,29 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import UIKit
-
-private struct RecentlyVisitedCellUX {
-    static let generalCornerRadius: CGFloat = 10
-    static let heroImageDimension: CGFloat = 24
-    static let shadowRadius: CGFloat = 0
-    static let shadowOffset: CGFloat = 2
-}
-
-struct HistoryHighlightsViewModel {
-    let title: String
-    let description: String?
-    let favIconImage: UIImage?
-    let corners: UIRectCorner?
-    let hideBottomLine: Bool
-    let isFillerCell: Bool
-    let shouldAddShadow: Bool
-
-    init(title: String,
-         description: String?,
-         shouldHideBottomLine: Bool,
-         with corners: UIRectCorner? = nil,
-         and heroImage: UIImage? = nil,
-         andIsFillerCell: Bool = false,
-         shouldAddShadow: Bool = false) {
-
-        self.title = title
-        self.description = description
-        self.hideBottomLine = shouldHideBottomLine
-        self.corners = corners
-        self.favIconImage = heroImage
-        self.isFillerCell = andIsFillerCell
-        self.shouldAddShadow = shouldAddShadow
-    }
-
-    // Filler cell init
-    init(shouldHideBottomLine: Bool,
-         with corners: UIRectCorner? = nil,
-         shouldAddShadow: Bool) {
-
-        self.init(title: "",
-                  description: "",
-                  shouldHideBottomLine: shouldHideBottomLine,
-                  with: corners,
-                  and: nil,
-                  andIsFillerCell: true,
-                  shouldAddShadow: shouldAddShadow)
-    }
-}
+import SiteImageView
+import Shared
 
 /// A cell used in FxHomeScreen's History Highlights section.
 class HistoryHighlightsCell: UICollectionViewCell, ReusableCell {
-
-    // MARK: - UI Elements
-    var shadowViewLayer: CAShapeLayer?
-    
-    let heroImage: UIImageView = .build { imageView in
-        imageView.contentMode = .scaleAspectFit
-        imageView.clipsToBounds = true
-        imageView.layer.masksToBounds = true
-        imageView.layer.cornerRadius = RecentlyVisitedCellUX.generalCornerRadius
-        imageView.image = UIImage.templateImageNamed(ImageIdentifiers.stackedTabsIcon)
+    struct UX {
+        static let verticalSpacing: CGFloat = 20
+        static let horizontalSpacing: CGFloat = 16
+        static let heroImageDimension: CGFloat = 24
     }
 
+    // MARK: - UI Elements
+    let imageView: FaviconImageView = .build { imageView in }
+
     let itemTitle: UILabel = .build { label in
-        // Limiting max size to accomodate for non-self-sizing parent cell.
         label.font = DynamicFontHelper.defaultHelper.preferredFont(withTextStyle: .body,
-                                                                   maxSize: 23)
+                                                                   size: 15)
         label.adjustsFontForContentSizeCategory = true
     }
 
     let itemDescription: UILabel = .build { label in
-        // Limiting max size to accomodate for non-self-sizing parent cell.
         label.font = DynamicFontHelper.defaultHelper.preferredFont(withTextStyle: .caption1,
-                                                                   maxSize: 18)
+                                                                   size: 12)
         label.adjustsFontForContentSizeCategory = true
     }
 
@@ -97,22 +46,22 @@ class HistoryHighlightsCell: UICollectionViewCell, ReusableCell {
     var isFillerCell: Bool = false {
         didSet {
             itemTitle.isHidden = isFillerCell
-            heroImage.isHidden = isFillerCell
+            imageView.isHidden = isFillerCell
             bottomLine.isHidden = isFillerCell
         }
     }
 
     // MARK: - Variables
-    var notificationCenter: NotificationCenter = NotificationCenter.default
-    
+    private var cellModel: HistoryHighlightsModel?
+
     // MARK: - Inits
 
     override init(frame: CGRect) {
         super.init(frame: .zero)
 
-        applyTheme()
-        setupNotifications(forObserver: self,
-                           observing: [.DisplayThemeChanged])
+        isAccessibilityElement = true
+        accessibilityIdentifier = AccessibilityIdentifiers.FirefoxHomepage.HistoryHighlights.itemCell
+
         setupLayout()
     }
 
@@ -120,93 +69,127 @@ class HistoryHighlightsCell: UICollectionViewCell, ReusableCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        notificationCenter.removeObserver(self)
-    }
-
     // MARK: - Public methods
-    public func updateCell(with options: HistoryHighlightsViewModel) {
+    func configureCell(with options: HistoryHighlightsModel, theme: Theme) {
+        cellModel = options
         itemTitle.text = options.title
-        itemDescription.text = options.description
+
+        if let descriptionCount = options.description {
+            itemDescription.text = descriptionCount
+            itemDescription.isHidden = false
+        }
+
         bottomLine.alpha = options.hideBottomLine ? 0 : 1
         isFillerCell = options.isFillerCell
-        itemDescription.isHidden = itemDescription.text?.isEmpty ?? false
+        accessibilityLabel = options.accessibilityLabel
 
-        if let corners = options.corners {
-            contentView.addRoundedCorners([corners], radius: RecentlyVisitedCellUX.generalCornerRadius)
+        if let url = options.urlString {
+            let faviconViewModel = FaviconImageViewModel(urlStringRequest: url)
+            imageView.setFavicon(faviconViewModel)
+        } else {
+            imageView.image = UIImage.templateImageNamed(ImageIdentifiers.stackedTabsIcon)
         }
-        
-        if options.shouldAddShadow {
-            addShadowLayer(cornersToRound: options.corners ?? UIRectCorner())
-        }
+
+        applyTheme(theme: theme)
     }
-    
+
     override func prepareForReuse() {
         super.prepareForReuse()
-        
-        shadowViewLayer?.removeFromSuperlayer()
+
+        imageView.image = nil
+        itemDescription.isHidden = true
+
+        contentView.layer.shadowRadius = 0.0
+        contentView.layer.shadowOpacity = 0.0
+        contentView.layer.shadowPath = nil
     }
 
     // MARK: - Setup Helper methods
     private func setupLayout() {
-        contentView.addSubview(heroImage)
+        contentView.addSubview(imageView)
         contentView.addSubview(textStack)
         contentView.addSubview(bottomLine)
 
         NSLayoutConstraint.activate([
-            heroImage.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            heroImage.heightAnchor.constraint(equalToConstant: RecentlyVisitedCellUX.heroImageDimension),
-            heroImage.widthAnchor.constraint(equalToConstant: RecentlyVisitedCellUX.heroImageDimension),
-            heroImage.centerYAnchor.constraint(equalTo: textStack.centerYAnchor),
+            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor,
+                                               constant: UX.horizontalSpacing),
+            imageView.heightAnchor.constraint(equalToConstant: UX.heroImageDimension),
+            imageView.widthAnchor.constraint(equalToConstant: UX.heroImageDimension),
+            imageView.centerYAnchor.constraint(equalTo: textStack.centerYAnchor),
 
-            textStack.leadingAnchor.constraint(equalTo: heroImage.trailingAnchor, constant: 12),
-            textStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
+            textStack.leadingAnchor.constraint(equalTo: imageView.trailingAnchor,
+                                               constant: UX.horizontalSpacing),
+            textStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor,
+                                                constant: -UX.horizontalSpacing),
             textStack.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
 
             bottomLine.heightAnchor.constraint(equalToConstant: 0.5),
             bottomLine.leadingAnchor.constraint(equalTo: itemTitle.leadingAnchor),
-            bottomLine.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            bottomLine.trailingAnchor.constraint(equalTo: contentView.trailingAnchor,
+                                                 constant: -UX.horizontalSpacing),
             bottomLine.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
     }
-    
-    private func addShadowLayer(cornersToRound: UIRectCorner) {
-        let shadowLayer = CAShapeLayer()
-        
-        shadowLayer.shadowColor = UIColor.theme.homePanel.shortcutShadowColor
-        shadowLayer.shadowOffset = CGSize(width: 0,
-                                          height: RecentlyVisitedCellUX.shadowOffset)
-        shadowLayer.shadowOpacity = UIColor.theme.homePanel.shortcutShadowOpacity
-        shadowLayer.shadowRadius = RecentlyVisitedCellUX.shadowRadius
-        
-        let radiusSize = CGSize(width: RecentlyVisitedCellUX.generalCornerRadius,
-                                height: RecentlyVisitedCellUX.generalCornerRadius)
-        shadowLayer.shadowPath = UIBezierPath(roundedRect: bounds,
-                                              byRoundingCorners: cornersToRound,
-                                              cornerRadii: radiusSize).cgPath
-        shadowLayer.shouldRasterize = true
-        shadowLayer.rasterizationScale = UIScreen.main.scale
 
-        shadowViewLayer = shadowLayer
-        layer.insertSublayer(shadowLayer, at: 0)
+    private func setupShadow(_ shouldAddShadow: Bool,
+                             cornersToRound: CACornerMask?,
+                             theme: Theme) {
+        contentView.layer.maskedCorners = cornersToRound ?? .layerMaxXMinYCorner
+        contentView.layer.cornerRadius = HomepageViewModel.UX.generalCornerRadius
+
+        var needsShadow = shouldAddShadow
+        if let cornersToRound = cornersToRound {
+            needsShadow = cornersToRound.contains(.layerMinXMaxYCorner) ||
+                cornersToRound.contains(.layerMaxXMaxYCorner) ||
+                shouldAddShadow
+        }
+
+        if needsShadow {
+            let size: CGFloat = 5
+            let distance: CGFloat = 0
+            let rect = CGRect(
+                x: -size,
+                y: contentView.frame.height - (size * 0.4) + distance,
+                width: contentView.frame.width + size * 2,
+                height: size
+            )
+
+            contentView.layer.shadowColor = theme.colors.shadowDefault.cgColor
+            contentView.layer.shadowRadius = HomepageViewModel.UX.shadowRadius
+            contentView.layer.shadowOpacity = HomepageViewModel.UX.shadowOpacity
+            contentView.layer.shadowOffset = HomepageViewModel.UX.shadowOffset
+            contentView.layer.shadowPath = UIBezierPath(ovalIn: rect).cgPath
+        }
     }
 }
 
-extension HistoryHighlightsCell: Themeable {
-    func applyTheme() {
-        contentView.backgroundColor = UIColor.theme.homePanel.recentlySavedBookmarkCellBackground
-        heroImage.tintColor = UIColor.theme.homePanel.recentlyVisitedCellGroupImage
-        bottomLine.backgroundColor = UIColor.theme.homePanel.recentlyVisitedCellBottomLine
+// MARK: - ThemeApplicable
+extension HistoryHighlightsCell: ThemeApplicable {
+    func applyTheme(theme: Theme) {
+        imageView.tintColor = theme.colors.iconPrimary
+        bottomLine.backgroundColor = theme.colors.borderPrimary
+        itemTitle.textColor = theme.colors.textPrimary
+        itemDescription.textColor = theme.colors.textSecondary
+
+        adjustBlur(theme: theme)
     }
 }
 
-// MARK: - Notifiable
-extension HistoryHighlightsCell: Notifiable {
-    func handleNotifications(_ notification: Notification) {
-        switch notification.name {
-        case .DisplayThemeChanged:
-            applyTheme()
-        default: break
+// MARK: - Blurrable
+extension HistoryHighlightsCell: Blurrable {
+    func adjustBlur(theme: Theme) {
+        // If blur is disabled set background color
+        if shouldApplyWallpaperBlur {
+            contentView.addBlurEffectWithClearBackgroundAndClipping(using: .systemThickMaterial)
+            contentView.backgroundColor = .clear
+            contentView.layer.maskedCorners = cellModel?.corners ?? .layerMaxXMinYCorner
+            contentView.layer.cornerRadius = HomepageViewModel.UX.generalCornerRadius
+        } else {
+            contentView.removeVisualEffectView()
+            contentView.backgroundColor = theme.colors.layer5
+            setupShadow(cellModel?.shouldAddShadow ?? false,
+                        cornersToRound: cellModel?.corners,
+                        theme: theme)
         }
     }
 }

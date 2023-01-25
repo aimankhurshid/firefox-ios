@@ -3,18 +3,30 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0
 
 import Foundation
+import Glean
 import Shared
 @_exported import MozillaAppServices
 
-private let log = Logger.syncLogger
-
-typealias LoginsStoreError = LoginsStorageError
+typealias LoginsStoreError = LoginsApiError
 public typealias LoginRecord = EncryptedLogin
+
+public extension LoginsStoreError {
+    var descriptionValue: String {
+        switch self {
+        case .InvalidRecord: return "InvalidRecord"
+        case .NoSuchRecord: return "NoSuchRecord"
+        case .IncorrectKey: return "IncorrectKey"
+        case .Interrupted: return "Interrupted"
+        case .SyncAuthInvalid: return "SyncAuthInvalid"
+        case .UnexpectedLoginsApiError: return "UnexpectedLoginsApiError"
+        }
+    }
+}
 
 public extension EncryptedLogin {
     init(credentials: URLCredential, protectionSpace: URLProtectionSpace) {
         let hostname: String
-        if let _ = protectionSpace.protocol {
+        if protectionSpace.protocol != nil {
             hostname = protectionSpace.urlString()
         } else {
             hostname = protectionSpace.host
@@ -23,21 +35,21 @@ public extension EncryptedLogin {
         let httpRealm = protectionSpace.realm
         let username = credentials.user ?? ""
         let password = credentials.password ?? ""
-        let fields = LoginFields.init(origin: hostname, httpRealm: httpRealm, formActionOrigin: "", usernameField: "", passwordField: "")
-        let record = RecordFields.init(id: "", timesUsed: 0, timeCreated: 0, timeLastUsed: 0, timePasswordChanged: 0)
-        let login = Login.init(record: record, fields: fields, secFields: SecureLoginFields.init(password: password, username: username))
+        let fields = LoginFields(origin: hostname, httpRealm: httpRealm, formActionOrigin: "", usernameField: "", passwordField: "")
+        let record = RecordFields(id: "", timesUsed: 0, timeCreated: 0, timeLastUsed: 0, timePasswordChanged: 0)
+        let login = Login(record: record, fields: fields, secFields: SecureLoginFields(password: password, username: username))
 
         self.init(
             record: record,
             fields: fields,
             secFields: ""
         )
-     
+
         let rustLoginsEncryption: RustLoginEncryptionKeys = RustLoginEncryptionKeys()
         let encryptedLogin = rustLoginsEncryption.encryptSecureFields(login: login)
         self.secFields = encryptedLogin?.secFields ?? ""
     }
-    
+
     var formSubmitUrl: String? {
         get {
             return self.fields.formActionOrigin
@@ -46,7 +58,7 @@ public extension EncryptedLogin {
             self.fields.formActionOrigin = newValue
         }
     }
-    
+
     var httpRealm: String? {
         get {
             return self.fields.httpRealm
@@ -55,7 +67,7 @@ public extension EncryptedLogin {
             self.fields.httpRealm = newValue
         }
     }
-    
+
     var hostname: String {
         get {
             return self.fields.origin
@@ -64,7 +76,7 @@ public extension EncryptedLogin {
             self.fields.origin = newValue
         }
     }
-    
+
     var usernameField: String {
         get {
             return self.fields.usernameField
@@ -73,7 +85,7 @@ public extension EncryptedLogin {
             self.fields.usernameField = newValue
         }
     }
-    
+
     var passwordField: String {
         get {
             return self.fields.passwordField
@@ -82,7 +94,7 @@ public extension EncryptedLogin {
             self.fields.passwordField = newValue
         }
     }
-    
+
     var id: String {
         get {
             return self.record.id
@@ -91,7 +103,7 @@ public extension EncryptedLogin {
             self.record.id = newValue
         }
     }
-    
+
     var timePasswordChanged: Int64 {
         get {
             return self.record.timePasswordChanged
@@ -100,7 +112,7 @@ public extension EncryptedLogin {
             self.record.timePasswordChanged = newValue
         }
     }
-    
+
     var timeCreated: Int64 {
         get {
             return self.record.timeCreated
@@ -110,21 +122,16 @@ public extension EncryptedLogin {
         }
     }
 
-
     var decryptedUsername: String {
-        get {
-            let rustKeys = RustLoginEncryptionKeys()
-            return rustKeys.decryptSecureFields(login: self)?.secFields.username ?? ""
-        }
+        let rustKeys = RustLoginEncryptionKeys()
+        return rustKeys.decryptSecureFields(login: self)?.secFields.username ?? ""
     }
-    
+
     var decryptedPassword: String {
-        get {
-            let rustKeys = RustLoginEncryptionKeys()
-            return rustKeys.decryptSecureFields(login: self)?.secFields.password ?? ""
-        }
+        let rustKeys = RustLoginEncryptionKeys()
+        return rustKeys.decryptSecureFields(login: self)?.secFields.password ?? ""
     }
-    
+
     var credentials: URLCredential {
         let rustLoginsEncryption: RustLoginEncryptionKeys = RustLoginEncryptionKeys()
         let login = rustLoginsEncryption.decryptSecureFields(login: self)
@@ -137,28 +144,40 @@ public extension EncryptedLogin {
 
     var hasMalformedHostname: Bool {
         let hostnameURL = fields.origin.asURL
-        guard let _ = hostnameURL?.host else {
-            return true
-        }
+        guard hostnameURL?.host != nil else { return true }
 
         return false
     }
-    
+
     init(fromJSONDict dict: [String: Any]) {
         let password = dict["password"] as? String ?? ""
         let username = dict["username"] as? String ?? ""
-        
-        let fields = LoginFields.init(origin: dict["hostname"] as? String ?? "", httpRealm: dict["httpRealm"] as? String, formActionOrigin: dict["formSubmitUrl"] as? String, usernameField: dict["usernameField"] as? String ?? "", passwordField: dict["passwordField"] as? String ?? "")
-        
-        let record = RecordFields.init(id: dict["id"] as? String ?? "", timesUsed: (dict["timesUsed"] as? Int64) ?? 0, timeCreated: (dict["timeCreated"] as? Int64) ?? 0, timeLastUsed: (dict["timeLastUsed"] as? Int64) ?? 0, timePasswordChanged: (dict["timePasswordChanged"] as? Int64) ?? 0)
-        let login = Login.init(record: record, fields: fields, secFields: SecureLoginFields.init(password: password, username: username))
+
+        let fields = LoginFields(
+            origin: dict["hostname"] as? String ?? "",
+            httpRealm: dict["httpRealm"] as? String,
+            formActionOrigin: dict["formSubmitUrl"] as? String,
+            usernameField: dict["usernameField"] as? String ?? "",
+            passwordField: dict["passwordField"] as? String ?? "")
+
+        let record = RecordFields(
+            id: dict["id"] as? String ?? "",
+            timesUsed: (dict["timesUsed"] as? Int64) ?? 0,
+            timeCreated: (dict["timeCreated"] as? Int64) ?? 0,
+            timeLastUsed: (dict["timeLastUsed"] as? Int64) ?? 0,
+            timePasswordChanged: (dict["timePasswordChanged"] as? Int64) ?? 0)
+        let login = Login(
+            record: record,
+            fields: fields,
+            secFields: SecureLoginFields(password: password,
+                                         username: username))
 
         self.init(
             record: record,
             fields: fields,
             secFields: ""
         )
-        
+
         let rustLoginsEncryption: RustLoginEncryptionKeys = RustLoginEncryptionKeys()
         let encryptedLogin = rustLoginsEncryption.encryptSecureFields(login: login)
         self.secFields = encryptedLogin?.secFields ?? ""
@@ -167,7 +186,7 @@ public extension EncryptedLogin {
     func toJSONDict() -> [String: Any] {
         let rustLoginsEncryption: RustLoginEncryptionKeys = RustLoginEncryptionKeys()
         let login = rustLoginsEncryption.decryptSecureFields(login: self)
-        
+
         var dict: [String: Any] = [
             "id": record.id,
             "password": login?.secFields.password ?? "",
@@ -204,7 +223,7 @@ public class LoginEntryFlattened {
     var formSubmitUrl: String?
     var usernameField: String
     var passwordField: String
-    
+
     public init(id: String, hostname: String, password: String, username: String, httpRealm: String?, formSubmitUrl: String?, usernameField: String, passwordField: String) {
         self.id = id
         self.hostname = hostname
@@ -220,7 +239,7 @@ public class LoginEntryFlattened {
 public extension LoginEntry {
     init(credentials: URLCredential, protectionSpace: URLProtectionSpace) {
         let hostname: String
-        if let _ = protectionSpace.protocol {
+        if protectionSpace.protocol != nil {
             hostname = protectionSpace.urlString()
         } else {
             hostname = protectionSpace.host
@@ -229,26 +248,31 @@ public extension LoginEntry {
         let httpRealm = protectionSpace.realm
         let username = credentials.user
         let password = credentials.password
-        let fields = LoginFields.init(origin: hostname, httpRealm: httpRealm, formActionOrigin: "", usernameField: "", passwordField: "")
-        
+        let fields = LoginFields(origin: hostname, httpRealm: httpRealm, formActionOrigin: "", usernameField: "", passwordField: "")
+
         self.init(
             fields: fields,
-            secFields: SecureLoginFields.init(password: password ?? "", username: username ?? "")
+            secFields: SecureLoginFields(password: password ?? "", username: username ?? "")
         )
     }
-    
-   init(fromJSONDict dict: [String: Any]) {
+
+    init(fromJSONDict dict: [String: Any]) {
         let password = dict["password"] as? String ?? ""
         let username = dict["username"] as? String ?? ""
-        
-        let fields = LoginFields.init(origin: dict["hostname"] as? String ?? "", httpRealm: dict["httpRealm"] as? String, formActionOrigin: dict["formSubmitUrl"] as? String, usernameField: dict["usernameField"] as? String ?? "", passwordField: dict["passwordField"] as? String ?? "")
-        
+
+        let fields = LoginFields(
+            origin: dict["hostname"] as? String ?? "",
+            httpRealm: dict["httpRealm"] as? String,
+            formActionOrigin: dict["formSubmitUrl"] as? String,
+            usernameField: dict["usernameField"] as? String ?? "",
+            passwordField: dict["passwordField"] as? String ?? "")
+
         self.init(
             fields: fields,
-            secFields: SecureLoginFields.init(password: password, username: username)
+            secFields: SecureLoginFields(password: password, username: username)
         )
     }
-    
+
     init(fromLoginEntryFlattened login: LoginEntryFlattened) {
         self.init(
             fields: LoginFields(
@@ -264,7 +288,7 @@ public extension LoginEntry {
             )
         )
     }
-    
+
     var hostname: String {
         get {
             return self.fields.origin
@@ -273,7 +297,7 @@ public extension LoginEntry {
             self.fields.origin = newValue
         }
     }
-    
+
     var username: String {
         get {
             return self.secFields.username
@@ -282,7 +306,7 @@ public extension LoginEntry {
             self.secFields.username = newValue
         }
     }
-    
+
     var password: String {
         get {
             return self.secFields.password
@@ -291,15 +315,15 @@ public extension LoginEntry {
             self.secFields.password = newValue
         }
     }
-    
+
     var protectionSpace: URLProtectionSpace {
         return URLProtectionSpace.fromOrigin(fields.origin)
     }
-    
+
     var credentials: URLCredential {
         return URLCredential(user: self.secFields.username, password: self.secFields.password, persistence: .forSession)
     }
-    
+
     var isValid: Maybe<Void> {
         // Referenced from https://mxr.mozilla.org/mozilla-central/source/toolkit/components/passwordmgr/nsLoginManager.js?rev=f76692f0fcf8&mark=280-281#271
 
@@ -314,7 +338,8 @@ public extension LoginEntry {
         }
 
         // Logins with both a formSubmitUrl and httpRealm are not valid.
-        if let _ = self.fields.formActionOrigin, let _ = self.fields.httpRealm  {
+        if self.fields.formActionOrigin != nil,
+           self.fields.httpRealm != nil {
             return Maybe(failure: LoginRecordError(description: "Can't add a login with both a httpRealm and formSubmitUrl."))
         }
 
@@ -337,57 +362,123 @@ public class RustLoginEncryptionKeys {
     public let loginsSaltKeychainKey = "sqlcipher.key.logins.salt"
     public let loginsUnlockKeychainKey = "sqlcipher.key.logins.db"
     public let loginPerFieldKeychainKey = "appservices.key.logins.perfield"
-    
+
     // The old database salt and key will be stored in the two keychain keys below to allow
     // for potential data restore
     public let loginsPostMigrationSalt = "sqlcipher.key.logins.salt.post.migration"
     public let loginsPostMigrationKey = "sqlcipher.key.logins.db.post.migration"
-    
+
     let keychain: MZKeychainWrapper = MZKeychainWrapper.sharedClientAppContainerKeychain
     let canaryPhraseKey = "canaryPhrase"
     let canaryPhrase = "a string for checking validity of the key"
-    
+
     public init() {}
-    
+
     fileprivate func createAndStoreKey() throws -> String {
         do {
             let secret = try createKey()
             let canary = try createCanary(text: canaryPhrase, encryptionKey: secret)
-            
+
             keychain.set(secret, forKey: loginPerFieldKeychainKey, withAccessibility: MZKeychainItemAccessibility.afterFirstUnlock)
-            keychain.set(canary, forKey: canaryPhraseKey, withAccessibility: MZKeychainItemAccessibility.afterFirstUnlock)
-            
+            keychain.set(canary,
+                         forKey: canaryPhraseKey,
+                         withAccessibility: MZKeychainItemAccessibility.afterFirstUnlock)
+
             return secret
         } catch let err as NSError {
-            Sentry.shared.sendWithStacktrace(message: "Error creating logins encryption key", tag: SentryTag.rustLogins, severity: .error, description: err.localizedDescription)
-            throw LoginEncryptionKeyError.noKeyCreated
+            if let loginsStoreError = err as? LoginsStoreError {
+                sendLoginsStoreErrorToSentry(
+                    err: loginsStoreError,
+                    errorDomain: err.domain,
+                    errorMessage: "Error while creating and storing logins key")
+
+                throw LoginEncryptionKeyError.noKeyCreated
+            } else {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Unknown error while creating and storing logins key",
+                    tag: SentryTag.rustLogins,
+                    severity: .error,
+                    description: err.localizedDescription)
+
+                throw LoginEncryptionKeyError.noKeyCreated
+            }
         }
     }
-    
+
     func decryptSecureFields(login: EncryptedLogin) -> Login? {
         guard let key = self.keychain.string(forKey: self.loginPerFieldKeychainKey) else {
             return nil
         }
-        
+
         do {
             return try decryptLogin(login: login, encryptionKey: key)
         } catch let err as NSError {
-            Sentry.shared.sendWithStacktrace(message: "Error decrypting login", tag: SentryTag.rustLogins, severity: .error, description: err.localizedDescription)
-            return nil
+            if let loginsStoreError = err as? LoginsStoreError {
+                sendLoginsStoreErrorToSentry(
+                    err: loginsStoreError,
+                    errorDomain: err.domain,
+                    errorMessage: "Error while decrypting login")
+            } else {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Unknown error while decrypting login",
+                    tag: SentryTag.rustLogins,
+                    severity: .error,
+                    description: err.localizedDescription)
+            }
         }
+        return nil
     }
-    
-    func encryptSecureFields(login: Login, encryptionKey: String? = nil) -> EncryptedLogin? {
+
+    func encryptSecureFields(
+        login: Login,
+        encryptionKey: String? = nil
+    ) -> EncryptedLogin? {
         guard let key = self.keychain.string(forKey: self.loginPerFieldKeychainKey) else {
             return nil
         }
-        
+
         do {
             return try encryptLogin(login: login, encryptionKey: key)
         } catch let err as NSError {
-            Sentry.shared.sendWithStacktrace(message: "Error encrypting login", tag: SentryTag.rustLogins, severity: .error, description: err.localizedDescription)
-            return nil
+            if let loginsStoreError = err as? LoginsStoreError {
+                sendLoginsStoreErrorToSentry(
+                    err: loginsStoreError,
+                    errorDomain: err.domain,
+                    errorMessage: "Error while encrypting login")
+            } else {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Unknown error while encrypting login",
+                    tag: SentryTag.rustLogins,
+                    severity: .error,
+                    description: err.localizedDescription)
+            }
         }
+        return nil
+    }
+
+    private func sendLoginsStoreErrorToSentry(
+        err: LoginsStoreError,
+        errorDomain: String,
+        errorMessage: String
+    ) {
+        var message: String {
+            switch err {
+            case .InvalidRecord(let message),
+                    .NoSuchRecord(let message),
+                    .Interrupted(let message),
+                    .SyncAuthInvalid(let message),
+                    .UnexpectedLoginsApiError(let message):
+                return message
+            case .IncorrectKey:
+                return "Incorrect key"
+            }
+        }
+
+        SentryIntegration.shared.sendWithStacktrace(
+            message: errorMessage,
+            tag: SentryTag.rustLogins,
+            severity: .error,
+            description: "\(errorDomain) - \(err.descriptionValue): \(message)")
     }
 }
 
@@ -408,11 +499,11 @@ public class RustLogins {
     private(set) var isOpen = false
 
     private var didAttemptToMoveToBackup = false
-    
+
     public init(sqlCipherDatabasePath: String, databasePath: String) {
         self.sqlCipherDatabasePath = sqlCipherDatabasePath
         self.perFieldDatabasePath = databasePath
-        
+
         queue = DispatchQueue(label: "RustLogins queue: \(databasePath)", attributes: [])
     }
 
@@ -429,9 +520,17 @@ public class RustLogins {
                 // This is an unrecoverable
                 // state unless we can move the existing file to a backup
                 // location and start over.
-                Sentry.shared.sendWithStacktrace(message: "Unspecified or other error when opening Rust Logins database", tag: SentryTag.rustLogins, severity: .error, description: loginsStoreError.localizedDescription)
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Logins store error when opening Rust Logins database",
+                    tag: SentryTag.rustLogins,
+                    severity: .error,
+                    description: loginsStoreError.localizedDescription)
             } else {
-                Sentry.shared.sendWithStacktrace(message: "Unknown error when opening Rust Logins database", tag: SentryTag.rustLogins, severity: .error, description: err.localizedDescription)
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Unknown error when opening Rust Logins database",
+                    tag: SentryTag.rustLogins,
+                    severity: .error,
+                    description: err.localizedDescription)
             }
 
             if !didAttemptToMoveToBackup {
@@ -479,7 +578,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -491,9 +590,17 @@ public class RustLogins {
                 if let loginsStoreError = err as? LoginsStoreError {
                     switch loginsStoreError {
                     case let .SyncAuthInvalid(message):
-                        Sentry.shared.sendWithStacktrace(message: "Panicked when syncing Logins database", tag: SentryTag.rustLogins, severity: .error, description: message)
+                        SentryIntegration.shared.sendWithStacktrace(
+                            message: "Authentication failed when syncing Logins database",
+                            tag: SentryTag.rustLogins,
+                            severity: .error,
+                            description: message)
                     default:
-                        Sentry.shared.sendWithStacktrace(message: "Unspecified or other error when syncing Logins database", tag: SentryTag.rustLogins, severity: .error, description: loginsStoreError.localizedDescription)
+                        SentryIntegration.shared.sendWithStacktrace(
+                            message: "Unknown or other error when syncing Logins database",
+                            tag: SentryTag.rustLogins,
+                            severity: .error,
+                            description: loginsStoreError.localizedDescription)
                     }
                 }
 
@@ -509,7 +616,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -565,13 +672,13 @@ public class RustLogins {
                     let login = rustKeys.decryptSecureFields(login: $0)
                     return login?.secFields.username ?? "" == username && (
                         $0.fields.origin == protectionSpace.urlString() ||
-                            $0.fields.origin == protectionSpace.host
+                        $0.fields.origin == protectionSpace.host
                     )
                 }
             } else {
                 filteredRecords = records.filter {
                     return $0.fields.origin == protectionSpace.urlString() ||
-                        $0.fields.origin == protectionSpace.host
+                    $0.fields.origin == protectionSpace.host
                 }
             }
             return deferMaybe(ArrayCursor(data: filteredRecords))
@@ -593,7 +700,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -614,7 +721,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -636,7 +743,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -657,7 +764,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -683,7 +790,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -704,7 +811,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -725,7 +832,7 @@ public class RustLogins {
 
         queue.async {
             guard self.isOpen else {
-                let error = LoginsStoreError.MismatchedLock(message: "Database is closed")
+                let error = LoginsStoreError.UnexpectedLoginsApiError(reason: "Database is closed")
                 deferred.fill(Maybe(failure: error as MaybeErrorType))
                 return
             }
@@ -740,83 +847,114 @@ public class RustLogins {
 
         return deferred
     }
-    
+
     private func migrateSQLCipherDBIfNeeded(key: String) {
         let keychain = MZKeychainWrapper.sharedClientAppContainerKeychain
         let rustKeys: RustLoginEncryptionKeys = RustLoginEncryptionKeys()
         let sqlCipherLoginsKey: String? = keychain.string(forKey: rustKeys.loginsUnlockKeychainKey)
         let sqlCipherLoginsSalt: String? = keychain.string(forKey: rustKeys.loginsSaltKeychainKey)
-        
+
         // If the sqlcipher salt or key are missing don't migrate
-        if ((sqlCipherLoginsKey ?? "").isEmpty || (sqlCipherLoginsSalt ?? "").isEmpty) {
+        if (sqlCipherLoginsKey ?? "").isEmpty || (sqlCipherLoginsSalt ?? "").isEmpty {
             return
         }
-        
-        let migrationSucceeded = migrateLoginsWithMetrics(path: self.perFieldDatabasePath, newEncryptionKey: key, sqlcipherPath: self.sqlCipherDatabasePath, sqlcipherKey: sqlCipherLoginsKey!, salt: sqlCipherLoginsSalt!)
-        
+
+        let migrationSucceeded = migrateLoginsFromSqlcipher(
+            path: self.perFieldDatabasePath,
+            newEncryptionKey: key,
+            sqlcipherPath: self.sqlCipherDatabasePath,
+            sqlcipherKey: sqlCipherLoginsKey!,
+            salt: sqlCipherLoginsSalt!)
+
         // If the migration fails, move the old database file and store the old key and salt for
         // potential data restore
         if !migrationSucceeded {
             RustShared.moveDatabaseFileToBackupLocation(databasePath: self.sqlCipherDatabasePath)
-            
-            keychain.set(sqlCipherLoginsSalt!, forKey: rustKeys.loginsPostMigrationSalt, withAccessibility: .afterFirstUnlock)
-            keychain.set(sqlCipherLoginsKey!, forKey: rustKeys.loginsPostMigrationKey, withAccessibility: .afterFirstUnlock)
+
+            keychain.set(sqlCipherLoginsSalt!,
+                         forKey: rustKeys.loginsPostMigrationSalt,
+                         withAccessibility: .afterFirstUnlock)
+            keychain.set(sqlCipherLoginsKey!,
+                         forKey: rustKeys.loginsPostMigrationKey,
+                         withAccessibility: .afterFirstUnlock)
         }
-        
+
         keychain.removeObject(forKey: rustKeys.loginsUnlockKeychainKey, withAccessibility: .afterFirstUnlock)
         keychain.removeObject(forKey: rustKeys.loginsSaltKeychainKey, withAccessibility: .afterFirstUnlock)
     }
-    
+
     public func getStoredKey() throws -> String {
         let rustKeys = RustLoginEncryptionKeys()
         let key = rustKeys.keychain.string(forKey: rustKeys.loginPerFieldKeychainKey)
         let encryptedCanaryPhrase = rustKeys.keychain.string(forKey: rustKeys.canaryPhraseKey)
-        
+
         switch(key, encryptedCanaryPhrase) {
-            case (.some(key), .some(encryptedCanaryPhrase)):
-                // We expected the key to be present, and it is.
-                do {
-                    let canaryIsValid = try checkCanary(canary: encryptedCanaryPhrase!, text: rustKeys.canaryPhrase, encryptionKey: key!)
-                    if canaryIsValid {
-                        return key!
-                    } else {
-                        Sentry.shared.sendWithStacktrace(message: "Logins key was corrupted, new one generated", tag: SentryTag.rustLogins, severity: .warning)
-                        _ = self.wipeLocalEngine()
-                        return try rustKeys.createAndStoreKey()
-                    }
-                } catch let err as NSError {
-                    Sentry.shared.sendWithStacktrace(message: "Error retrieving logins encryption key", tag: SentryTag.rustLogins, severity: .error, description: err.localizedDescription)
-                }
-            case (.some(key), .none):
-                // The key is present, but we didn't expect it to be there.
-                do {
-                    Sentry.shared.sendWithStacktrace(message: "Logins key lost due to storage malfunction, new one generated", tag: SentryTag.rustLogins, severity: .warning)
+        case (.some(key), .some(encryptedCanaryPhrase)):
+            // We expected the key to be present, and it is.
+            do {
+                let canaryIsValid = try checkCanary(
+                    canary: encryptedCanaryPhrase!,
+                    text: rustKeys.canaryPhrase,
+                    encryptionKey: key!)
+                if canaryIsValid {
+                    return key!
+                } else {
+                    SentryIntegration.shared.sendWithStacktrace(
+                        message: "Logins key was corrupted, new one generated",
+                        tag: SentryTag.rustLogins,
+                        severity: .warning)
+                    GleanMetrics.LoginsStoreKeyRegeneration.corrupt.record()
                     _ = self.wipeLocalEngine()
+
                     return try rustKeys.createAndStoreKey()
-                } catch let err as NSError {
-                    throw err
                 }
-            case (.none, .some(encryptedCanaryPhrase)):
-                // We expected the key to be present, but it's gone missing on us.
-                do {
-                    Sentry.shared.sendWithStacktrace(message: "Logins key lost, new one generated", tag: SentryTag.rustLogins, severity: .warning)
-                    _ = self.wipeLocalEngine()
-                    return try rustKeys.createAndStoreKey()
-                } catch let err as NSError {
-                    throw err
-                }
-            case (.none, .none):
-                // We didn't expect the key to be present, and it's not (which is the case for first-time calls).
-                do {
-                    return try rustKeys.createAndStoreKey()
-                } catch let err as NSError {
-                    throw err
-                }
-            default:
-                // If none of the above cases apply, we're in a state that shouldn't be possible but is disallowed nonetheless
-                throw LoginEncryptionKeyError.illegalState
+            } catch let error as NSError {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Error retrieving logins encryption key",
+                    tag: SentryTag.rustLogins,
+                    severity: .error,
+                    description: error.localizedDescription)
+            }
+        case (.some(key), .none):
+            // The key is present, but we didn't expect it to be there.
+            do {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Logins key lost due to storage malfunction, new one generated",
+                    tag: SentryTag.rustLogins,
+                    severity: .warning)
+                GleanMetrics.LoginsStoreKeyRegeneration.other.record()
+                _ = self.wipeLocalEngine()
+
+                return try rustKeys.createAndStoreKey()
+            } catch let error as NSError {
+                throw error
+            }
+        case (.none, .some(encryptedCanaryPhrase)):
+            // We expected the key to be present, but it's gone missing on us.
+            do {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Logins key lost, new one generated",
+                    tag: SentryTag.rustLogins,
+                    severity: .warning)
+                GleanMetrics.LoginsStoreKeyRegeneration.lost.record()
+                _ = self.wipeLocalEngine()
+
+                return try rustKeys.createAndStoreKey()
+            } catch let error as NSError {
+                throw error
+            }
+        case (.none, .none):
+            // We didn't expect the key to be present, and it's not (which is the case for first-time calls).
+            do {
+                return try rustKeys.createAndStoreKey()
+            } catch let error as NSError {
+                throw error
+            }
+        default:
+            // If none of the above cases apply, we're in a state that shouldn't be possible but is disallowed nonetheless
+            throw LoginEncryptionKeyError.illegalState
         }
-        
+
         // This must be declared again for Swift's sake even though the above switch statement handles all cases
         throw LoginEncryptionKeyError.illegalState
     }

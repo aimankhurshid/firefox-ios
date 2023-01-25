@@ -6,7 +6,6 @@ import UIKit
 
 public enum AppName: String, CustomStringConvertible {
     case shortName = "Firefox"
-    case longName = "Firefox Daylight"
 
     public var description: String {
         return self.rawValue
@@ -38,10 +37,22 @@ public struct KeychainKey {
 }
 
 public struct AppConstants {
-    public static let IsRunningTest = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.arguments.contains(LaunchArguments.Test)
+    // Any type of tests (UI and Unit)
+    public static let isRunningTest = NSClassFromString("XCTestCase") != nil
+    || AppConstants.isRunningUITests
+    || AppConstants.isRunningPerfTests
 
-    public static let IsRunningPerfTest = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.arguments.contains(LaunchArguments.PerformanceTest)
-    
+    // Unit tests only
+    public static let isRunningUnitTest = NSClassFromString("XCTestCase") != nil
+    && !AppConstants.isRunningUITests
+    && !AppConstants.isRunningPerfTests
+
+    // Only UI tests
+    public static let isRunningUITests = ProcessInfo.processInfo.arguments.contains(LaunchArguments.Test)
+
+    // Only performance tests
+    public static let isRunningPerfTests = ProcessInfo.processInfo.arguments.contains(LaunchArguments.PerformanceTest)
+
     public static let FxAiOSClientId = "1b1a3e44c54fbb58"
 
     /// Build Channel.
@@ -94,7 +105,16 @@ public struct AppConstants {
 
     /// The maximum length of a bookmark description stored by Firefox. Shared with Places on desktop.
     public static let DB_DESCRIPTION_LENGTH_MAX = 1024
-    
+
     /// Fixed short version for nightly builds
     public static let NIGHTLY_APP_VERSION = "9000"
+
+    /// Time that needs to pass before polling FxA for send tabs again, 86_400_000 milliseconds is 1 day
+    public static let FXA_COMMANDS_INTERVAL = 86_400_000
+
+    /// The maximum number of times we should attempt to migrated the History to Application Services Places DB
+    public static let MAX_HISTORY_MIGRATION_ATTEMPT = 5
+
+    /// The maximum size of the places DB in bytes
+    public static let DB_SIZE_LIMIT_IN_BYTES: UInt32 = 75 * 1024 * 1024 // corresponds to 75MiB (in bytes)
 }

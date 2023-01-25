@@ -3,8 +3,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0
 
 import UIKit
-
 import Storage
+import Shared
 
 protocol LoginDetailTableViewCellDelegate: AnyObject {
     func didSelectOpenAndFillForCell(_ cell: LoginDetailTableViewCell)
@@ -16,7 +16,6 @@ protocol LoginDetailTableViewCellDelegate: AnyObject {
 
 public struct LoginTableViewCellUX {
     static let highlightedLabelFont = UIFont.systemFont(ofSize: 12)
-    static let highlightedLabelTextColor = UIConstants.SystemBlueColor
     static let descriptionLabelFont = UIFont.systemFont(ofSize: 16)
     static let HorizontalMargin: CGFloat = 14
 }
@@ -27,11 +26,17 @@ enum LoginTableViewCellStyle {
     case iconAndDescriptionLabel
 }
 
-class LoginDetailTableViewCell: ThemedTableViewCell {
-
+class LoginDetailTableViewCell: ThemedTableViewCell, ReusableCell {
     fileprivate lazy var labelContainer: UIView = .build { _ in }
 
     weak var delegate: LoginDetailTableViewCellDelegate?
+
+    var cellType: LoginDetailTableViewCellType = .standard
+    enum LoginDetailTableViewCellType {
+        case standard
+        case delete
+        case editingFieldData
+    }
 
     // In order for context menu handling, this is required
     override var canBecomeFirstResponder: Bool {
@@ -61,7 +66,6 @@ class LoginDetailTableViewCell: ThemedTableViewCell {
     // and the text property is exposed using a get/set property below.
     fileprivate lazy var highlightedLabel: UILabel = .build { label in
         label.font = LoginTableViewCellUX.highlightedLabelFont
-        label.textColor = LoginTableViewCellUX.highlightedLabelTextColor
         label.numberOfLines = 1
     }
 
@@ -75,15 +79,13 @@ class LoginDetailTableViewCell: ThemedTableViewCell {
                 return "\(highlightedLabel.text ?? ""), \(descriptionLabel.text ?? "")"
             }
         }
-        set {
-            // Ignore sets
-        }
+        // swiftlint:disable unused_setter_value
+        set { }
+        // swiftlint:enable unused_setter_value
     }
 
     var descriptionTextSize: CGSize? {
-        guard let descriptionText = descriptionLabel.text else {
-            return nil
-        }
+        guard let descriptionText = descriptionLabel.text else { return nil }
 
         let attributes = [
             NSAttributedString.Key.font: LoginTableViewCellUX.descriptionLabelFont
@@ -91,7 +93,7 @@ class LoginDetailTableViewCell: ThemedTableViewCell {
 
         return descriptionText.size(withAttributes: attributes)
     }
-    
+
     var placeholder: String? {
         get { descriptionLabel.placeholder }
         set { descriptionLabel.placeholder = newValue }
@@ -107,7 +109,7 @@ class LoginDetailTableViewCell: ThemedTableViewCell {
         didSet {
             guard isEditingFieldData != oldValue else { return }
             descriptionLabel.isUserInteractionEnabled = isEditingFieldData
-            highlightedLabel.textColor = isEditingFieldData ? UIColor.theme.tableView.headerTextLight: LoginTableViewCellUX.highlightedLabelTextColor
+            cellType = isEditingFieldData ? .editingFieldData: .standard
         }
     }
 
@@ -164,15 +166,29 @@ class LoginDetailTableViewCell: ThemedTableViewCell {
         setNeedsUpdateConstraints()
     }
 
-    override func applyTheme() {
-        super.applyTheme()
-        descriptionLabel.textColor = UIColor.theme.tableView.rowText
+    func configure(type: LoginDetailTableViewCellType) {
+        self.cellType = type
+    }
+
+    override func applyTheme(theme: Theme) {
+        super.applyTheme(theme: theme)
+
+        switch cellType {
+        case .standard:
+            highlightedLabel.textColor = theme.colors.actionPrimary
+        case .editingFieldData:
+            highlightedLabel.textColor = theme.colors.textSecondary
+        case .delete:
+            textLabel?.textColor = theme.colors.textWarning
+            backgroundColor = theme.colors.layer2
+        }
+
+        descriptionLabel.textColor = theme.colors.textPrimary
     }
 }
 
 // MARK: - Menu Selectors
 extension LoginDetailTableViewCell: MenuHelperInterface {
-
     func menuHelperReveal() {
         displayDescriptionAsPassword = false
     }
@@ -217,7 +233,7 @@ extension LoginDetailTableViewCell: UITextFieldDelegate {
         }
         delegate?.textFieldDidEndEditing(self)
     }
-    
+
     @objc func textFieldDidChange(_ textField: UITextField) {
         delegate?.textFieldDidChange(self)
     }

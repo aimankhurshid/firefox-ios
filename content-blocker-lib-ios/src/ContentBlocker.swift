@@ -38,7 +38,7 @@ enum BlocklistFileName: String, CaseIterable {
 
     case advertisingCookies = "disconnect-block-cookies-advertising"
     case analyticsCookies = "disconnect-block-cookies-analytics"
-    //case contentCookies = "disconnect-block-cookies-content"
+    // case contentCookies = "disconnect-block-cookies-content"
     case socialCookies = "disconnect-block-cookies-social"
 
     var filename: String { return self.rawValue }
@@ -85,8 +85,8 @@ class ContentBlocker {
 
         TPStatsBlocklistChecker.shared.startup()
 
-        removeOldListsByDateFromStore() {
-            self.removeOldListsByNameFromStore() {
+        removeOldListsByDateFromStore {
+            self.removeOldListsByNameFromStore {
                 self.compileListsNotInStore {
                     self.setupCompleted = true
                     NotificationCenter.default.post(name: .contentBlockerTabSetupRequired, object: nil)
@@ -148,7 +148,7 @@ class ContentBlocker {
         }
 
         // Async required here to ensure remove() call is processed.
-        DispatchQueue.main.async() { [weak tab] in
+        DispatchQueue.main.async { [weak tab] in
             tab?.currentWebView()?.evaluateJavascriptInDefaultContentWorld("window.__firefox__.NoImageMode.setEnabled(\(enabled))")
         }
     }
@@ -163,9 +163,10 @@ extension ContentBlocker {
     private func loadJsonFromBundle(forResource file: String, completion: @escaping (_ jsonString: String) -> Void) {
         DispatchQueue.global().async {
             guard let path = Bundle.main.path(forResource: file, ofType: "json"),
-                let source = try? String(contentsOfFile: path, encoding: .utf8) else {
-                    assert(false)
-                    return
+                  let source = try? String(contentsOfFile: path, encoding: .utf8)
+            else {
+                assertionFailure("Error unwrapping the resource contents")
+                return
             }
 
             DispatchQueue.main.async {
@@ -219,7 +220,6 @@ extension ContentBlocker {
     // If any blocker files are newer than the date saved in prefs,
     // remove all the content blockers and reload them.
     func removeOldListsByDateFromStore(completion: @escaping () -> Void) {
-
             guard let fileDate = dateOfMostRecentBlockerFile() else {
             completion()
             return
@@ -238,7 +238,7 @@ extension ContentBlocker {
 
         UserDefaults.standard.set(fileDate, forKey: "blocker-file-date")
 
-        removeAllRulesInStore() {
+        removeAllRulesInStore {
             completion()
         }
     }
@@ -286,8 +286,7 @@ extension ContentBlocker {
                     str = str.replacingCharacters(in: range, with: self.safelistAsJSON() + "]")
                     self.ruleStore.compileContentRuleList(forIdentifier: filename, encodedContentRuleList: str) { rule, error in
                         if let error = error {
-                            print("Content blocker error: \(error)")
-                            assert(false)
+                            assertionFailure("Content blocker error: \(error)")
                         }
                         assert(rule != nil)
 

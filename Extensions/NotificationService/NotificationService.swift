@@ -45,7 +45,23 @@ class NotificationService: UNNotificationServiceExtension {
         let handler = FxAPushMessageHandler(with: profile)
 
         handler.handle(userInfo: userInfo).upon { res in
-            self.didFinish(res.successValue, with: res.failureValue as? PushMessageError)
+            guard res.isSuccess, let events = res.successValue, let firstEvent = events.first else {
+                self.didFinish(nil, with: res.failureValue as? PushMessageError)
+                return
+            }
+            // We pass the first event to the notification handler, and add the rest directly
+            // to our own handling of send tab if they are send tabs so users don't miss them
+            for (idx, event) in events.enumerated() {
+                if  idx != 0,
+                    case let .commandReceived(tab) = event,
+                    let urlString = tab["url"],
+                    let url = URL(string: urlString),
+                    url.isWebPage(),
+                    let title = tab["title"] {
+                    self.profile?.syncDelegate?.displaySentTab(for: url, title: title, from: tab["deviceName"])
+                }
+            }
+            self.didFinish(firstEvent)
         }
     }
 
@@ -57,13 +73,11 @@ class NotificationService: UNNotificationServiceExtension {
             // Rather than changing tabQueue, we manually nil it out here.
             self.display?.tabQueue = nil
 
-            profile?._shutdown()
+            profile?.shutdown()
             consoleLog("push didFinish end")
         }
 
-        guard let display = self.display else {
-            return
-        }
+        guard let display = self.display else { return }
 
         display.messageDelivered = false
         display.displayNotification(what, profile: profile, with: error)
@@ -80,7 +94,7 @@ class NotificationService: UNNotificationServiceExtension {
 }
 
 class SyncDataDisplay {
-    var contentHandler: ((UNNotificationContent) -> Void)
+    var contentHandler: (UNNotificationContent) -> Void
     var notificationContent: UNMutableNotificationContent
 
     var tabQueue: TabQueue?
@@ -90,7 +104,7 @@ class SyncDataDisplay {
         self.contentHandler = contentHandler
         self.notificationContent = content
         self.tabQueue = tabQueue
-        Sentry.shared.setup(sendUsageData: true)
+        SentryIntegration.shared.setup(sendUsageData: true)
     }
 
     func displayNotification(_ message: PushMessage? = nil, profile: ExtensionProfile?, with error: PushMessageError? = nil) {
@@ -139,7 +153,7 @@ extension SyncDataDisplay {
     }
 
     func displayAccountVerifiedNotification() {
-        Sentry.shared.send(message: "SentTab error: account not verified")
+        SentryIntegration.shared.send(message: "SentTab error: account not verified")
         #if MOZ_CHANNEL_BETA || DEBUG
             presentNotification(title: .SentTab_NoTabArrivingNotification_title, body: "DEBUG: Account Verified")
             return
@@ -149,7 +163,7 @@ extension SyncDataDisplay {
     }
 
     func displayUnknownMessageNotification(debugInfo: String) {
-        Sentry.shared.send(message: "SentTab error: \(debugInfo)")
+        SentryIntegration.shared.send(message: "SentTab error: \(debugInfo)")
         #if MOZ_CHANNEL_BETA || DEBUG
             presentNotification(title: .SentTab_NoTabArrivingNotification_title, body: "DEBUG: " + debugInfo)
             return
@@ -172,7 +186,7 @@ extension SyncDataDisplay {
             notificationContent.userInfo["sentTabs"] = [tab] as NSArray
 
             // Add tab to the queue.
-            let item = ShareItem(url: urlString, title: title, favicon: nil)
+            let item = ShareItem(url: urlString, title: title)
             _ = tabQueue?.addToQueue(item).value // Force synchronous.
 
             presentNotification(title: .SentTab_TabArrivingNotification_NoDevice_title, body: url.absoluteDisplayExternalString)
@@ -185,14 +199,14 @@ extension SyncDataDisplay {
         let title: String
         let body: String
 
-        if tabs.count == 0 {
+        if tabs.isEmpty {
             title = .SentTab_NoTabArrivingNotification_title
             #if MOZ_CHANNEL_BETA || DEBUG
                 body = "DEBUG: Sent Tabs with no tab"
             #else
                 body = .SentTab_NoTabArrivingNotification_body
             #endif
-            Sentry.shared.send(message: "SentTab error: no tab")
+            SentryIntegration.shared.send(message: "SentTab error: no tab")
         } else {
             let deviceNames = Set(tabs.compactMap { $0["deviceName"] as? String })
             if let deviceName = deviceNames.first, deviceNames.count == 1 {
@@ -206,7 +220,7 @@ extension SyncDataDisplay {
                 // because we have only just introduced "displayURL" as a key.
                 body = (tabs[0]["displayURL"] as? String) ??
                     (tabs[0]["url"] as! String)
-            } else if deviceNames.count == 0 {
+            } else if deviceNames.isEmpty {
                 body = .SentTab_TabArrivingNotification_NoDevice_body
             } else {
                 body = String(format: .SentTab_TabArrivingNotification_WithDevice_body, AppInfo.displayName)
@@ -238,7 +252,7 @@ extension SyncDataDisplay {
 extension SyncDataDisplay: SyncDelegate {
     func displaySentTab(for url: URL, title: String, from deviceName: String?) {
         if url.isWebPage() {
-            let item = ShareItem(url: url.absoluteString, title: title, favicon: nil)
+            let item = ShareItem(url: url.absoluteString, title: title)
             _ = tabQueue?.addToQueue(item).value // Force synchronous.
         }
     }

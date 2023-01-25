@@ -5,7 +5,6 @@
 import UIKit
 
 open class MailtoLinkHandler {
-
     lazy var mailSchemeProviders: [String: MailProvider] = self.fetchMailSchemeProviders()
 
     func launchMailClientForScheme(_ scheme: String, metadata: MailToMetadata, defaultMailtoURL: URL) {
@@ -30,6 +29,8 @@ open class MailtoLinkHandler {
                         providerDict[scheme] = ReaddleSparkIntegration()
                     } else if scheme == "mymail-mailto://" {
                         providerDict[scheme] = MyMailIntegration()
+                    } else if scheme == "protonmail://" {
+                        providerDict[scheme] = ProtonMailIntegration()
                     } else if scheme == "mailru-mailto://" {
                         providerDict[scheme] = MailRuIntegration()
                     } else if scheme == "airmail://" {

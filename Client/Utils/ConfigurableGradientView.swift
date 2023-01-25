@@ -6,7 +6,6 @@ import Foundation
 
 /// A view whose primary modifiable layer is a gradient layer
 public class ConfigurableGradientView: UIView {
-
     init() {
         super.init(frame: .zero)
     }
@@ -24,7 +23,7 @@ public class ConfigurableGradientView: UIView {
         return CAGradientLayer.self
     }
 
-    /// The main interfact through which the gradient view is configured.
+    /// The main interface through which the gradient view is configured.
     ///
     /// - Parameters:
     ///   - colors: An array outlining the colors through which the gradient will shift.

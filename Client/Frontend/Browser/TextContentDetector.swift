@@ -5,7 +5,6 @@
 import Foundation
 
 class TextContentDetector {
-
     enum DetectedType {
         case phoneNumber(String)
         case link(URL)
@@ -17,8 +16,12 @@ class TextContentDetector {
     }()
 
     static func detectTextContent(_ content: String) -> DetectedType? {
+        guard let match = dataDetector.firstMatch(
+            in: content,
+            options: [],
+            range: NSRange(location: 0, length: content.count))
+        else { return nil }
 
-        guard let match = dataDetector.firstMatch(in: content, options: [], range: NSRange(location: 0, length: content.count)) else { return nil }
         switch match.resultType {
         case .link:
             return .link(match.url!)

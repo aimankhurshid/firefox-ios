@@ -9,22 +9,8 @@ public protocol Identifiable: Equatable {
     var id: Int? { get set }
 }
 
-public func ==<T>(lhs: T, rhs: T) -> Bool where T: Identifiable {
+public func == <T> (lhs: T, rhs: T) -> Bool where T: Identifiable {
     return lhs.id == rhs.id
-}
-
-open class Favicon: Identifiable {
-    open var id: Int?
-
-    public let url: String
-    public let date: Date
-    open var width: Int?
-    open var height: Int?
-
-    public init(url: String, date: Date = Date()) {
-        self.url = url
-        self.date = date
-    }
 }
 
 // TODO: Site shouldn't have all of these optional decorators. Include those in the
@@ -36,7 +22,7 @@ open class Site: Identifiable {
     open var tileURL: URL {
         return URL(string: url)?.domainURL ?? URL(string: "about:blank")!
     }
-    
+
     // i.e. `http://www.example.com/` --> `example`
     open var secondLevelDomain: String? {
         return URL(string: url)?.host?.components(separatedBy: ".").suffix(2).first
@@ -45,8 +31,6 @@ open class Site: Identifiable {
     public let url: String
     public let title: String
     open var metadata: PageMetadata?
-     // Sites may have multiple favicons. We'll return the largest.
-    open var icon: Favicon?
     open var latestVisit: Visit?
     open fileprivate(set) var bookmarked: Bool?
 
@@ -64,7 +48,6 @@ open class Site: Identifiable {
     open func setBookmarked(_ bookmarked: Bool) {
         self.bookmarked = bookmarked
     }
-
 }
 
 // MARK: - Hashable
@@ -76,5 +59,4 @@ extension Site: Hashable {
      public static func == (lhs: Site, rhs: Site) -> Bool {
          lhs.url == rhs.url
      }
-    
  }

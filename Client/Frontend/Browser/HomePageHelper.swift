@@ -4,7 +4,6 @@
 
 import Foundation
 import Shared
-import XCGLogger
 
 private let log = Logger.browserLogger
 
@@ -14,7 +13,6 @@ struct HomePageConstants {
 }
 
 class HomePageHelper {
-
     let prefs: Prefs
 
     var currentURL: URL? {
@@ -48,5 +46,4 @@ class HomePageHelper {
         }
         tab.loadRequest(URLRequest(url: url))
     }
-
 }

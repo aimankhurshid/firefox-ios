@@ -10,7 +10,6 @@ private let iPadFactor: CGFloat = 1.06
 private let iPhoneFactor: CGFloat = 0.88
 
 class DynamicFontHelper: NSObject {
-
     static var defaultHelper: DynamicFontHelper {
         struct Singleton {
             static let instance = DynamicFontHelper()
@@ -28,7 +27,7 @@ class DynamicFontHelper: NSObject {
     }
 
     /**
-     * Starts monitoring the ContentSizeCategory chantes
+     * Starts monitoring the ContentSizeCategory changes
      */
     func startObserving() {
         NotificationCenter.default.addObserver(self, selector: #selector(contentSizeCategoryDidChange), name: UIContentSizeCategory.didChangeNotification, object: nil)
@@ -42,9 +41,7 @@ class DynamicFontHelper: NSObject {
      * Device specific
      */
     fileprivate var deviceFontSize: CGFloat
-    var DeviceFontSize: CGFloat {
-        return deviceFontSize
-    }
+
     var DeviceFont: UIFont {
         return UIFont.systemFont(ofSize: deviceFontSize, weight: UIFont.Weight.medium)
     }
@@ -57,29 +54,14 @@ class DynamicFontHelper: NSObject {
     var DeviceFontSmallLight: UIFont {
         return UIFont.systemFont(ofSize: deviceFontSize - 1, weight: UIFont.Weight.light)
     }
-    var DeviceFontSmallHistoryPanel: UIFont {
-        return UIFont.systemFont(ofSize: deviceFontSize - 3, weight: UIFont.Weight.light)
-    }
-    var DeviceFontHistoryPanel: UIFont {
-        return UIFont.systemFont(ofSize: deviceFontSize)
-    }
     var DeviceFontSmallBold: UIFont {
         return UIFont.boldSystemFont(ofSize: deviceFontSize - 1)
-    }
-    var DeviceFontLarge: UIFont {
-        return UIFont.systemFont(ofSize: deviceFontSize + 3)
     }
     var DeviceFontExtraLarge: UIFont {
         return UIFont.systemFont(ofSize: deviceFontSize + 4)
     }
-    var DeviceFontMedium: UIFont {
-        return UIFont.systemFont(ofSize: deviceFontSize + 1)
-    }
     var DeviceFontLargeBold: UIFont {
         return UIFont.boldSystemFont(ofSize: deviceFontSize + 2)
-    }
-    var DeviceFontMediumBold: UIFont {
-        return UIFont.boldSystemFont(ofSize: deviceFontSize + 1)
     }
     var DeviceFontExtraLargeBold: UIFont {
         return UIFont.boldSystemFont(ofSize: deviceFontSize + 4)
@@ -95,39 +77,15 @@ class DynamicFontHelper: NSObject {
         let size = max(deviceFontSize, 16.5)
         return UIFont.systemFont(ofSize: size)
     }
-    
-    var MediumSizeRegularWeightAS: UIFont {
-        let size = max(deviceFontSize, 18)
-        return UIFont.systemFont(ofSize: size)
-    }
 
     var LargeSizeRegularWeightAS: UIFont {
         let size = max(deviceFontSize + 2, 20)
         return UIFont.systemFont(ofSize: size)
     }
 
-    var MediumSizeHeavyWeightAS: UIFont {
-        let size = max(deviceFontSize + 2, 18)
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.heavy)
-    }
-    var SmallSizeMediumWeightAS: UIFont {
-        let size = max(defaultSmallFontSize, 14)
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.medium)
-    }
-
     var MediumSizeBoldFontAS: UIFont {
         let size = max(deviceFontSize, 18)
         return UIFont.boldSystemFont(ofSize: size)
-    }
-    
-    var LargeSizeHeavyFontAS: UIFont {
-        let size = max(deviceFontSize + 2, 20)
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.heavy)
-    }
-
-    var SmallSizeHeavyWeightAS: UIFont {
-        let size = max(deviceFontSize, 16)
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.heavy)
     }
 
     var SmallSizeRegularWeightAS: UIFont {
@@ -139,9 +97,6 @@ class DynamicFontHelper: NSObject {
      * Small
      */
     fileprivate var defaultSmallFontSize: CGFloat
-    var DefaultSmallFontSize: CGFloat {
-        return defaultSmallFontSize
-    }
     var DefaultSmallFont: UIFont {
         return UIFont.systemFont(ofSize: defaultSmallFontSize, weight: UIFont.Weight.regular)
     }
@@ -153,9 +108,6 @@ class DynamicFontHelper: NSObject {
      * Medium
      */
     fileprivate var defaultMediumFontSize: CGFloat
-    var DefaultMediumFontSize: CGFloat {
-        return defaultMediumFontSize
-    }
     var DefaultMediumFont: UIFont {
         return UIFont.systemFont(ofSize: defaultMediumFontSize, weight: UIFont.Weight.regular)
     }
@@ -187,16 +139,6 @@ class DynamicFontHelper: NSObject {
         return defaultStandardFontSize + 5
     }
 
-    /**
-     * Intro mode
-     */
-    var IntroStandardFontSize: CGFloat {
-        return min(defaultStandardFontSize - 1, 16)
-    }
-    var IntroBigFontSize: CGFloat {
-        return min(defaultStandardFontSize + 1, 18)
-    }
-
     func refreshFonts() {
         defaultStandardFontSize = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .body).pointSize
         deviceFontSize = defaultStandardFontSize * (UIDevice.current.userInterfaceIdiom == .pad ? iPadFactor : iPhoneFactor)
@@ -209,30 +151,60 @@ class DynamicFontHelper: NSObject {
         let notification = Notification(name: .DynamicFontChanged, object: nil)
         NotificationCenter.default.post(notification)
     }
-    
+
     /// Return a font that will dynamically scale up to a certain size
     /// - Parameters:
     ///   - textStyle: The desired textStyle for the font
-    ///   - maxSize: The maximum size the font can scale - Refer to the human interface guidelines for more information on sizes for each style
+    ///   - weight: The weight of the font (optional)
+    ///   - maxSize: The maximum size the font can scale - Refer to the human interface guidelines for more information on sizes for each style (optional)
     ///              https://developer.apple.com/design/human-interface-guidelines/ios/visual-design/typography/
-    /// - Returns: The UIFont with the specified font size and style
-    func preferredFont(withTextStyle textStyle: UIFont.TextStyle, maxSize: CGFloat) -> UIFont {
+    /// - Returns: The UIFont with the specified font size, style and weight
+    @available(*, deprecated, message: "Use preferredFont(withTextStyle:size:weight:) instead")
+    func preferredFont(withTextStyle textStyle: UIFont.TextStyle, weight: UIFont.Weight? = nil, maxSize: CGFloat? = nil) -> UIFont {
+        let fontMetrics = UIFontMetrics(forTextStyle: textStyle)
         let fontDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: textStyle)
-        return UIFont(descriptor: fontDescriptor, size: min(fontDescriptor.pointSize, maxSize))
+
+        var font: UIFont
+        if let weight = weight {
+            font = UIFont.systemFont(ofSize: fontDescriptor.pointSize, weight: weight)
+        } else {
+            font = UIFont(descriptor: fontDescriptor, size: fontDescriptor.pointSize)
+        }
+
+        guard let maxSize = maxSize else {
+            return fontMetrics.scaledFont(for: font)
+        }
+
+        return fontMetrics.scaledFont(for: font, maximumPointSize: min(fontDescriptor.pointSize, maxSize))
+    }
+
+    /// Return a font that will dynamically scale up to a certain size
+    /// - Parameters:
+    ///   - textStyle: The desired textStyle for the font
+    ///   - size: The size of the font
+    /// - Returns: The UIFont with the specified font size and style
+    func preferredFont(withTextStyle textStyle: UIFont.TextStyle,
+                       size: CGFloat,
+                       weight: UIFont.Weight? = nil) -> UIFont {
+        let fontMetrics = UIFontMetrics(forTextStyle: textStyle)
+        let fontDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: textStyle)
+
+        var font: UIFont
+        if let weight = weight {
+            font = UIFont.systemFont(ofSize: size, weight: weight)
+        } else {
+            font = UIFont(descriptor: fontDescriptor, size: size)
+        }
+
+        return fontMetrics.scaledFont(for: font)
     }
 
     /// Return a bold font that will dynamically scale up to a certain size
     /// - Parameters:
     ///   - textStyle: The desired textStyle for the font
-    ///   - maxSize: The maximum size the font can scale - Refer to the human interface guidelines for more information on sizes for each style
-    ///              https://developer.apple.com/design/human-interface-guidelines/ios/visual-design/typography/
-    /// - Returns: The UIFont with the specified bold font size and style
-    func preferredBoldFont(withTextStyle textStyle: UIFont.TextStyle, maxSize: CGFloat) -> UIFont {
-        let fontDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: textStyle)
-        if let boldFontDescriptor = fontDescriptor.withSymbolicTraits(.traitBold) {
-            return UIFont(descriptor: boldFontDescriptor, size: min(boldFontDescriptor.pointSize, maxSize))
-        } else {
-            return UIFont(descriptor: fontDescriptor, size: min(fontDescriptor.pointSize, maxSize))
-        }
+    ///   - size: The size of the font
+    /// - Returns: The UIFont with the specified font size, style and bold weight
+    func preferredBoldFont(withTextStyle textStyle: UIFont.TextStyle, size: CGFloat) -> UIFont {
+        return preferredFont(withTextStyle: textStyle, size: size, weight: .bold)
     }
 }

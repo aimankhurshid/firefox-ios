@@ -6,13 +6,12 @@ import Foundation
 import Shared
 
 class SearchBarSettingsViewController: SettingsTableViewController {
-
     private let viewModel: SearchBarSettingsViewModel
 
     init(viewModel: SearchBarSettingsViewModel) {
         self.viewModel = viewModel
         super.init(style: .grouped)
-        
+
         title = viewModel.title
         viewModel.delegate = self
     }

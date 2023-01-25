@@ -6,12 +6,6 @@ import Foundation
 import Shared
 import WebKit
 
-private let log = Logger.browserLogger
-private let ReadabilityServiceSharedInstance = ReadabilityService()
-
-private let ReadabilityTaskDefaultTimeout = 15
-private let ReadabilityServiceDefaultConcurrency = 1
-
 enum ReadabilityOperationResult {
     case success(ReadabilityResult)
     case error(NSError)
@@ -19,16 +13,24 @@ enum ReadabilityOperationResult {
 }
 
 class ReadabilityOperation: Operation {
+    let profile: Profile
+    private let log = Logger.browserLogger
+
     var url: URL
     var semaphore: DispatchSemaphore
     var result: ReadabilityOperationResult?
     var tab: Tab!
     var readerModeCache: ReaderModeCache
 
-    init(url: URL, readerModeCache: ReaderModeCache) {
+    init(
+        url: URL,
+        readerModeCache: ReaderModeCache,
+        profile: Profile
+    ) {
         self.url = url
         self.semaphore = DispatchSemaphore(value: 0)
         self.readerModeCache = readerModeCache
+        self.profile = profile
     }
 
     override func main() {
@@ -41,7 +43,8 @@ class ReadabilityOperation: Operation {
 
         DispatchQueue.main.async(execute: { () -> Void in
             let configuration = WKWebViewConfiguration()
-            self.tab = Tab(bvc: BrowserViewController.foregroundBVC(), configuration: configuration)
+            // TODO: To resolve profile from DI container
+            self.tab = Tab(profile: self.profile, configuration: configuration)
             self.tab.createWebview()
             self.tab.navigationDelegate = self
 
@@ -74,8 +77,8 @@ class ReadabilityOperation: Operation {
                     print("Failed to store readability results in the cache: \(error.localizedDescription)")
                     // TODO Fail
                 }
-            case .error(_):
-                // TODO Not entitely sure what to do on error. Needs UX discussion and followup bug.
+            case .error:
+                // TODO Not entirely sure what to do on error. Needs UX discussion and followup bug.
                 break
             }
         }
@@ -107,9 +110,7 @@ extension ReadabilityOperation: ReaderModeDelegate {
 
     func readerMode(_ readerMode: ReaderMode, didParseReadabilityResult readabilityResult: ReadabilityResult, forTab tab: Tab) {
         log.info("ReadbilityService: Readability result available!")
-        guard tab == self.tab else {
-            return
-        }
+        guard tab == self.tab else { return }
 
         result = ReadabilityOperationResult.success(readabilityResult)
         semaphore.signal()
@@ -117,9 +118,7 @@ extension ReadabilityOperation: ReaderModeDelegate {
 }
 
 class ReadabilityService {
-    class var sharedInstance: ReadabilityService {
-        return ReadabilityServiceSharedInstance
-    }
+    private let ReadabilityServiceDefaultConcurrency = 1
 
     var queue: OperationQueue
 
@@ -128,7 +127,11 @@ class ReadabilityService {
         queue.maxConcurrentOperationCount = ReadabilityServiceDefaultConcurrency
     }
 
-    func process(_ url: URL, cache: ReaderModeCache) {
-        queue.addOperation(ReadabilityOperation(url: url, readerModeCache: cache))
+    func process(_ url: URL, cache: ReaderModeCache, with profile: Profile) {
+        let readabilityOperation = ReadabilityOperation(url: url,
+                                                        readerModeCache: cache,
+                                                        profile: profile)
+
+        queue.addOperation(readabilityOperation)
     }
 }

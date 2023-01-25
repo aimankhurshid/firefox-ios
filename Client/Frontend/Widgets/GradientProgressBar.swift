@@ -14,7 +14,6 @@
 import UIKit
 
 open class GradientProgressBar: UIProgressView {
-
     private struct DefaultValues {
         static let backgroundColor = UIColor.clear
         static let animationDuration = 0.2 // CALayer default animation duration
@@ -45,8 +44,8 @@ open class GradientProgressBar: UIProgressView {
         }
     }
 
-    func setGradientColors(startColor: UIColor, endColor: UIColor) {
-        gradientColors = [startColor, endColor, startColor, endColor, startColor, endColor, startColor].map { $0.cgColor }
+    func setGradientColors(startColor: UIColor, middleColor: UIColor?, endColor: UIColor) {
+        gradientColors = [startColor, middleColor, endColor].compactMap { $0?.cgColor }
         gradientLayer.colors = gradientColors
     }
 
@@ -103,9 +102,7 @@ open class GradientProgressBar: UIProgressView {
     }
 
     func hideProgressBar() {
-        guard progress == 1 else {
-            return
-        }
+        guard progress == 1 else { return }
 
         CATransaction.begin()
         let moveAnimation = CABasicAnimation(keyPath: "position")

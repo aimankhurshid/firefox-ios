@@ -42,5 +42,13 @@ module.exports = {
   module: {
     rules: []
   },
-  plugins: []
+  plugins: [],
+  resolve: {
+    fallback: {
+      url: require.resolve("page-metadata-parser")
+    },
+    alias: {
+      Assets: path.resolve(__dirname, 'Client/Assets'),
+    },
+  }
 };

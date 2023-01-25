@@ -30,15 +30,15 @@ public enum SyncDisplayState {
     }
 }
 
-public func ==(a: SyncDisplayState, b: SyncDisplayState) -> Bool {
-    switch (a, b) {
+public func == (lhs: SyncDisplayState, rhs: SyncDisplayState) -> Bool {
+    switch (lhs, rhs) {
     case (.inProgress, .inProgress):
         return true
     case (.good, .good):
         return true
-    case (.bad(let a), .bad(let b)) where a == b:
+    case (.bad(let first), .bad(let second)) where first == second:
         return true
-    case (.warning(let a), .warning(let b)) where a == b:
+    case (.warning(let first), .warning(let second)) where first == second:
         return true
     default:
         return false
@@ -50,7 +50,6 @@ public func ==(a: SyncDisplayState, b: SyncDisplayState) -> Bool {
  * display-oriented state for displaying warnings/errors to the user.
  */
 public struct SyncStatusResolver {
-
     let engineResults: Maybe<EngineResults>
 
     public func resolveResults() -> SyncDisplayState {
@@ -71,17 +70,17 @@ public struct SyncStatusResolver {
                     return .bad(message: .FirefoxSyncOfflineTitle)
                 case .noAccount:
                     return .warning(message: .FirefoxSyncOfflineTitle)
-                case .backoff(_):
+                case .backoff:
                     return .good
-                case .engineRemotelyNotEnabled(_):
+                case .engineRemotelyNotEnabled:
                     return .good
-                case .engineFormatOutdated(_):
+                case .engineFormatOutdated:
                     return .good
-                case .engineFormatTooNew(_):
+                case .engineFormatTooNew:
                     return .good
-                case .storageFormatOutdated(_):
+                case .storageFormatOutdated:
                     return .good
-                case .storageFormatTooNew(_):
+                case .storageFormatTooNew:
                     return .good
                 case .stateMachineNotReady:
                     return .good
@@ -101,15 +100,14 @@ public struct SyncStatusResolver {
         // what might have happened with a particular engine when syncing.
         let aggregate: SyncDisplayState = displayStates.reduce(.good) { carried, displayState in
             switch displayState {
-
-            case .bad(_):
+            case .bad:
                 return displayState
 
-            case .warning(_):
+            case .warning:
                 // If the state we're carrying is worse than the stale one, keep passing
                 // along the worst one
                 switch carried {
-                case .bad(_):
+                case .bad:
                     return carried
                 default:
                     return displayState

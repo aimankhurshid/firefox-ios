@@ -15,8 +15,10 @@ class LegacyThemeManager {
 
     var current: LegacyTheme = themeFrom(name: UserDefaults.standard.string(forKey: LegacyThemeManagerPrefs.themeName.rawValue)) {
         didSet {
-            UserDefaults.standard.set(current.name, forKey: LegacyThemeManagerPrefs.themeName.rawValue)
-            NotificationCenter.default.post(name: .DisplayThemeChanged, object: nil)
+            ensureMainThread {
+                UserDefaults.standard.set(self.current.name, forKey: LegacyThemeManagerPrefs.themeName.rawValue)
+                NotificationCenter.default.post(name: .DisplayThemeChanged, object: nil)
+            }
         }
     }
 
@@ -48,7 +50,14 @@ class LegacyThemeManager {
         UserDefaults.standard.register(defaults: [LegacyThemeManagerPrefs.systemThemeIsOn.rawValue: true])
         systemThemeIsOn = UserDefaults.standard.bool(forKey: LegacyThemeManagerPrefs.systemThemeIsOn.rawValue)
 
-        NotificationCenter.default.addObserver(self, selector: #selector(brightnessChanged), name: UIScreen.brightnessDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(brightnessChanged),
+                                               name: UIScreen.brightnessDidChangeNotification,
+                                               object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(applicationDidBecomeActive),
+                                               name: UIApplication.didBecomeActiveNotification,
+                                               object: nil)
     }
 
     // UIViewControllers / UINavigationControllers need to have `preferredStatusBarStyle` and call this.
@@ -71,9 +80,9 @@ class LegacyThemeManager {
         let screenLessThanPref = Float(UIScreen.main.brightness) < prefValue
 
         if screenLessThanPref, self.currentName == .normal {
-            self.current = DarkTheme()
+            self.current = LegacyDarkTheme()
         } else if !screenLessThanPref, self.currentName == .dark {
-            self.current = NormalTheme()
+            self.current = LegacyNormalTheme()
         }
     }
 
@@ -81,14 +90,22 @@ class LegacyThemeManager {
         guard automaticBrightnessIsOn else { return }
         updateCurrentThemeBasedOnScreenBrightness()
     }
+
+    @objc private func applicationDidBecomeActive() {
+        let nightMode = UserDefaults.standard.bool(forKey: "profile.NightModeStatus")
+        if !nightMode && LegacyThemeManager.instance.systemThemeIsOn {
+            let userInterfaceStyle = UIScreen.main.traitCollection.userInterfaceStyle
+            LegacyThemeManager.instance.current = userInterfaceStyle == .dark ? LegacyDarkTheme() : LegacyNormalTheme()
+        }
+    }
 }
 
-fileprivate func themeFrom(name: String?) -> LegacyTheme {
-    guard let name = name, let theme = BuiltinThemeName(rawValue: name) else { return NormalTheme() }
+private func themeFrom(name: String?) -> LegacyTheme {
+    guard let name = name, let theme = BuiltinThemeName(rawValue: name) else { return LegacyNormalTheme() }
     switch theme {
     case .dark:
-        return DarkTheme()
+        return LegacyDarkTheme()
     default:
-        return NormalTheme()
+        return LegacyNormalTheme()
     }
 }

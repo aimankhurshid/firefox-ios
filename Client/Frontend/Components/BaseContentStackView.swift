@@ -10,7 +10,6 @@ protocol AlphaDimmable {
 }
 
 class BaseAlphaStackView: UIStackView, AlphaDimmable {
-
     var isClearBackground = false
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -43,14 +42,12 @@ class BaseAlphaStackView: UIStackView, AlphaDimmable {
     private var keyboardSpacer: UIView?
 
     func addKeyboardSpacer(spacerHeight: CGFloat) {
-        guard keyboardSpacer == nil else {
-            setKeyboardSpacerHeight(height: spacerHeight)
-            return
+        keyboardSpacer?.removeFromSuperview()
+        if keyboardSpacer == nil {
+            keyboardSpacer = UIView()
         }
-
-        keyboardSpacer = UIView()
-        setKeyboardSpacerHeight(height: spacerHeight)
         addArrangedViewToBottom(keyboardSpacer!)
+        setKeyboardSpacerHeight(height: spacerHeight)
     }
 
     func removeKeyboardSpacer() {
@@ -105,7 +102,6 @@ class BaseAlphaStackView: UIStackView, AlphaDimmable {
 }
 
 extension BaseAlphaStackView: NotificationThemeable {
-
     func applyTheme() {
         let color = isClearBackground ? .clear : UIColor.theme.browser.background
         backgroundColor = color

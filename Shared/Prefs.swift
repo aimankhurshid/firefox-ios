@@ -4,6 +4,7 @@
 
 import Foundation
 
+// New keys should follow the name: "[nameOfTheFeature]Key" written with camel case
 public struct PrefsKeys {
     // When this pref is set (by the user) it overrides default behaviour which is just based on app locale.
     public static let KeyEnableChinaSyncService = "useChinaSyncService"
@@ -11,11 +12,7 @@ public struct PrefsKeys {
     public static let KeyLastSyncFinishTime = "lastSyncFinishTime"
     public static let KeyDefaultHomePageURL = "KeyDefaultHomePageURL"
     public static let KeyNoImageModeStatus = "NoImageModeStatus"
-    public static let KeyNightModeButtonIsInMenu = "NightModeButtonIsInMenuPrefKey"
-    public static let KeyNightModeStatus = "NightModeStatus"
-    public static let KeyNightModeEnabledDarkTheme = "NightModeEnabledDarkTheme"
     public static let KeyMailToOption = "MailToOption"
-    public static let KeyLastVersionNumber = "KeyLastVersionNumber"
     public static let HasFocusInstalled = "HasFocusInstalled"
     public static let HasPocketInstalled = "HasPocketInstalled"
     public static let IntroSeen = "IntroViewControllerSeen"
@@ -25,8 +22,8 @@ public struct PrefsKeys {
     public static let LoginsSaveEnabled = "saveLogins"
     public static let LoginsShowShortcutMenuItem = "showLoginsInAppMenu"
     public static let KeyInstallSession = "installSessionNumber"
-    public static let KeyETPCoverSheetShowType = "etpCoverSheetShowType"
     public static let KeyDefaultBrowserCardShowType = "defaultBrowserCardShowType"
+    public static let DidDismissDefaultBrowserMessage = "DidDismissDefaultBrowserCard"
     public static let KeyDidShowDefaultBrowserOnboarding = "didShowDefaultBrowserOnboarding"
     public static let ContextMenuShowLinkPreviews = "showLinkPreviews"
     public static let NewTabCustomUrlPrefKey = "HomePageURLPref"
@@ -36,11 +33,41 @@ public struct PrefsKeys {
     public static let InstallType = "InstallType"
     public static let KeyCurrentInstallVersion = "KeyCurrentInstallVersion"
     public static let KeySecondRun = "SecondRun"
-    public static let KeySearchBarPosition = "SearchBarPosition"
 
+    public struct AppVersion {
+        public static let Latest = "latestAppVersion"
+    }
+
+    public struct Wallpapers {
+        public static let MetadataLastCheckedDate = "WallpaperMetadataLastCheckedUserPrefsKey"
+        public static let CurrentWallpaper = "CurrentWallpaperUserPrefsKey"
+        public static let ThumbnailsAvailable = "ThumbnailsAvailableUserPrefsKey"
+        public static let OnboardingSeenKey = "WallpaperOnboardingSeenKeyUserPrefsKey"
+
+        public static let legacyAssetMigrationCheck = "legacyAssetMigrationCheckUserPrefsKey"
+        public static let v1MigrationCheck = "v1MigrationCheckUserPrefsKey"
+    }
+
+    // For ease of use, please list keys alphabetically.
     public struct FeatureFlags {
+        public static let ASPocketStories = "ASPocketStoriesUserPrefsKey"
+        public static let ASSponsoredPocketStories = "ASSponsoredPocketStoriesUserPrefsKey"
+        public static let CustomWallpaper = "CustomWallpaperUserPrefsKey"
+        public static let HistoryHighlightsSection = "HistoryHighlightsSectionUserPrefsKey"
+        public static let HistoryGroups = "HistoryGroupsUserPrefsKey"
+        public static let InactiveTabs = "InactiveTabsUserPrefsKey"
+        public static let JumpBackInSection = "JumpBackInSectionUserPrefsKey"
+        public static let PullToRefresh = "PullToRefreshUserPrefsKey"
+        public static let RecentlySavedSection = "RecentlySavedSectionUserPrefsKey"
+        public static let SearchBarPosition = "SearchBarPositionUsersPrefsKey"
+        public static let StartAtHome = "StartAtHomeUserPrefsKey"
+        public static let SponsoredShortcuts = "SponsoredShortcutsUserPrefsKey"
+        public static let TabTrayGroups = "TabTrayGroupsUserPrefsKey"
+        public static let TopSiteSection = "TopSitesUserPrefsKey"
+    }
+
+    public struct LegacyFeatureFlags {
         public static let ASPocketStories = "ASPocketStoriesVisible"
-        public static let ChronologicalTabs = "chronTabsPrefKey"
         public static let CustomWallpaper = "customWallpaperPrefKey"
         public static let HistoryHighlightsSection = "historyHighlightsSectionEnabled"
         public static let HistoryGroups = "historyGroupsEnabled"
@@ -48,15 +75,24 @@ public struct PrefsKeys {
         public static let JumpBackInSection = "jumpBackInSectionEnabled"
         public static let PullToRefresh = "pullToRefresh"
         public static let RecentlySavedSection = "recentlySavedSectionEnabled"
+        public static let KeySearchBarPosition = "SearchBarPosition"
         public static let StartAtHome = "startAtHome"
         public static let TabTrayGroups = "KeyEnableGroupedTabsKey"
+        public static let SponsoredShortcuts = "sponsoredShortcutsKey"
+        public static let TopSiteSection = "topSitesKey"
+
+        public static let MigrationCheck = "MigrationCheck"
+        public static let WallpaperDirectoryMigrationCheck = "WallpaperDirectoryMigrationCheck"
     }
 
     // Firefox contextual hint
     public enum ContextualHints: String, CaseIterable {
-        case JumpBackinKey = "ContextualHintJumpBackin"
-        case InactiveTabsKey = "ContextualHintInactiveTabs"
-        case ToolbarOnboardingKey = "ContextualHintToolbarOnboardingKey"
+        case jumpBackinKey = "ContextualHintJumpBackin"
+        case jumpBackInConfiguredKey = "JumpBackInConfigured"
+        case jumpBackInSyncedTabKey = "ContextualHintJumpBackInSyncedTab"
+        case jumpBackInSyncedTabConfiguredKey = "JumpBackInSyncedTabConfigured"
+        case inactiveTabsKey = "ContextualHintInactiveTabs"
+        case toolbarOnboardingKey = "ContextualHintToolbarOnboardingKey"
     }
 
     // Activity Stream
@@ -74,7 +110,6 @@ public struct PrefsKeys {
     public static let AppExtensionTelemetryOpenUrl = "AppExtensionTelemetryOpenUrl"
     public static let AppExtensionTelemetryEventArray = "AppExtensionTelemetryEvents"
     public static let KeyBlockPopups = "blockPopups"
-    public static let KeyShowSponsoredShortcuts = "showSponsoredShortcuts"
 
     // Tabs Tray
     public static let KeyInactiveTabsModel = "KeyInactiveTabsModelKey"
@@ -85,15 +120,20 @@ public struct PrefsKeys {
     public static let WidgetKitSimpleTabKey = "WidgetKitSimpleTabKey"
     public static let WidgetKitSimpleTopTab = "WidgetKitSimpleTopTab"
 
-    // ThemeManager key
-    public static let ThemeManagerCustomizationKey = "ThemeManagerCustomizationKey"
-
-    // WallpaperManager Key
+    // WallpaperManager Keys - Legacy
     public static let WallpaperManagerCurrentWallpaperObject = "WallpaperManagerCurrentWallpaperObject"
     public static let WallpaperManagerCurrentWallpaperImage = "WallpaperManagerCurrentWallpaperImage"
     public static let WallpaperManagerCurrentWallpaperImageLandscape = "WallpaperManagerCurrentWallpaperImageLandscape"
     public static let WallpaperManagerLogoSwitchPreference = "WallpaperManagerLogoSwitchPreference"
-    public static let WallpaperLogoHasShownAnimation = "WallpaperLogoHasShownAnimation"
+
+    // Application Services migrated to Places DB Successfully
+    public static let PlacesHistoryMigrationSucceeded = "PlacesHistoryMigrationSucceeded"
+
+    // The number of times we have attempted the Application Services to Places DB migration
+    public static let HistoryMigrationAttemptNumber = "HistoryMigrationAttemptNumber"
+
+    // The last timestamp we polled FxA for missing send tabs
+    public static let PollCommandsTimestamp = "PollCommandsTimestamp"
 }
 
 public struct PrefsDefaults {

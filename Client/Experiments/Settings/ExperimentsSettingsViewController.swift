@@ -85,14 +85,13 @@ class ExperimentsSettingsViewController: UIViewController {
     // to the experiments screen.
     private func applyPendingExperiments() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            self.experiments.applyPendingExperiments()
+            _ = self.experiments.applyPendingExperiments()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 NotificationCenter.default.post(name: .nimbusExperimentsApplied, object: nil)
             }
         }
     }
 }
-
 
 extension ExperimentsSettingsViewController: UITextViewDelegate {
     func textViewDidChange(_ textView: UITextView) {

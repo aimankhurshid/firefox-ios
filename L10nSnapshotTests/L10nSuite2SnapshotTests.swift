@@ -5,7 +5,6 @@
 import XCTest
 
 class L10nSuite2SnapshotTests: L10nBaseSnapshotTests {
-
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
 
     func testPanelsEmptyState() {
@@ -32,7 +31,7 @@ class L10nSuite2SnapshotTests: L10nBaseSnapshotTests {
         waitForExistence(app.webViews.element(boundBy: 0).staticTexts.element(boundBy: 0), timeout: 10)
         app.webViews.element(boundBy: 0).staticTexts.element(boundBy: 0).press(forDuration: 1)
         snapshot("LongPressTextOptions-01")
-        if(app.menuItems["show.next.items.menu.button"].exists) {
+        if app.menuItems["show.next.items.menu.button"].exists {
             app.menuItems["show.next.items.menu.button"].tap()
             snapshot("LongPressTextOptions-02")
         }
@@ -49,15 +48,18 @@ class L10nSuite2SnapshotTests: L10nBaseSnapshotTests {
     }
 
     func testURLBarContextMenu() {
+        if #unavailable(iOS 16.0) {
         // Long press with nothing on the clipboard
         navigator.goto(URLBarLongPressMenu)
         snapshot("LocationBarContextMenu-01-no-url")
-        navigator.back()
+            // Skip from here on iOS 16 due to the AllowPaste API message
+            navigator.back()
 
-        // Long press with a URL on the clipboard
-        UIPasteboard.general.string = "https://www.mozilla.com"
-        navigator.goto(URLBarLongPressMenu)
-        snapshot("LocationBarContextMenu-02-with-url")
+            // Long press with a URL on the clipboard
+            UIPasteboard.general.string = "https://www.mozilla.com"
+            navigator.goto(URLBarLongPressMenu)
+            snapshot("LocationBarContextMenu-02-with-url")
+        }
     }
 
     func testMenuOnWebPage() {

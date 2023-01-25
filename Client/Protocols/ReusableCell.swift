@@ -2,12 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import Foundation
+import UIKit
 
 /// A protocol for any object to inherit the `cellIdentifier` string property.
 ///
 /// Intended for use with views that must register/deque cells, this allows
-/// a cleaner impelementation of the cell identifier by bypassing it being
+/// a cleaner implementation of the cell identifier by bypassing it being
 /// hardcoded which is prone to error.
 ///
 /// As defined in the extensions, this will generally, where adhering to the
@@ -28,8 +28,11 @@ extension ReusableCell where Self: UITableViewHeaderFooterView {
     static var cellIdentifier: String { return String(describing: self) }
 }
 
-extension UICollectionView: Loggable {
+extension ReusableCell where Self: UICollectionReusableView {
+    static var cellIdentifier: String { return String(describing: self) }
+}
 
+extension UICollectionView: Loggable {
     func dequeueReusableCell<T: ReusableCell>(cellType: T.Type, for indexPath: IndexPath) -> T? {
         guard let cell = dequeueReusableCell(withReuseIdentifier: T.cellIdentifier, for: indexPath) as? T else {
             browserLog.warning("Cannot dequeue cell at index path \(indexPath)")
@@ -41,5 +44,15 @@ extension UICollectionView: Loggable {
 
     func register<T: ReusableCell>(cellType: T.Type) {
         register(T.self, forCellWithReuseIdentifier: T.cellIdentifier)
+    }
+}
+
+extension UITableView {
+    func register<T: ReusableCell>(cellType: T.Type) {
+        register(T.self, forCellReuseIdentifier: T.cellIdentifier)
+    }
+
+    func registerHeaderFooter<T: ReusableCell>(cellType: T.Type) {
+        register(T.self, forHeaderFooterViewReuseIdentifier: T.cellIdentifier)
     }
 }

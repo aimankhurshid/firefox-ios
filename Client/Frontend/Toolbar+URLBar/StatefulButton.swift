@@ -12,7 +12,6 @@ enum ReloadButtonState: String {
 }
 
 class StatefulButton: UIButton {
-
     // MARK: - Initializers
 
     convenience init(frame: CGRect, state: ReloadButtonState) {
@@ -27,7 +26,7 @@ class StatefulButton: UIButton {
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     private var savedReloadButtonState = ReloadButtonState.disabled
 
     var reloadButtonState: ReloadButtonState {

@@ -5,9 +5,7 @@
 import Foundation
 import Shared
 import Storage
-import XCGLogger
-
-private let log = Logger.browserLogger
+import Glean
 
 private let URLBeforePathRegex = try! NSRegularExpression(pattern: "^https?://([^/]+)/", options: [])
 
@@ -15,18 +13,15 @@ private let URLBeforePathRegex = try! NSRegularExpression(pattern: "^https?://([
  * Shared data source for the SearchViewController and the URLBar domain completion.
  * Since both of these use the same SQL query, we can perform the query once and dispatch the results.
  */
-class SearchLoader: Loader<Cursor<Site>, SearchViewController> {
+class SearchLoader: Loader<Cursor<Site>, SearchViewController>, FeatureFlaggable {
     fileprivate let profile: Profile
     fileprivate let urlBar: URLBarView
-    fileprivate let frecentHistory: FrecentHistory
 
     private var skipNextAutocomplete: Bool
 
     init(profile: Profile, urlBar: URLBarView) {
         self.profile = profile
         self.urlBar = urlBar
-        self.frecentHistory = profile.history.getFrecentHistory()
-
         self.skipNextAutocomplete = false
 
         super.init()
@@ -52,50 +47,74 @@ class SearchLoader: Loader<Cursor<Site>, SearchViewController> {
         }
     }
 
+    private func getHistoryAsSites(matchingSearchQuery query: String, limit: Int) -> Deferred<Maybe<Cursor<Site>>> {
+        profile.places.interruptReader()
+        return self.profile.places.queryAutocomplete(matchingSearchQuery: query, limit: limit).bind { result in
+            guard let historyItems = result.successValue else {
+                SentryIntegration.shared.sendWithStacktrace(
+                    message: "Error searching history",
+                    tag: .rustPlaces,
+                    severity: .error,
+                    description: result.failureValue?.localizedDescription ?? "Unknown error searching history"
+                )
+                return deferMaybe(ArrayCursor(data: []))
+            }
+            let sites = historyItems.sorted {
+                // Sort decending by frecency score
+                $0.frecency > $1.frecency
+            }.map({
+                return Site(url: $0.url, title: $0.title )
+            }).uniqued()
+            return deferMaybe(ArrayCursor(data: sites))
+        }
+    }
+
     var query: String = "" {
         didSet {
-            guard self.profile is BrowserProfile else {
+            let timerid = GleanMetrics.Awesomebar.queryTime.start()
+            guard profile is BrowserProfile else {
                 assertionFailure("nil profile")
+                GleanMetrics.Awesomebar.queryTime.cancel(timerid)
                 return
             }
-
-            currentDeferredHistoryQuery?.cancel()
 
             if query.isEmpty {
                 load(Cursor(status: .success, msg: "Empty query"))
+                GleanMetrics.Awesomebar.queryTime.cancel(timerid)
                 return
             }
-
-            guard let deferredHistory = frecentHistory.getSites(matchingSearchQuery: query, limit: 100) as? CancellableDeferred else {
-                assertionFailure("FrecentHistory query should be cancellable")
-                return
-            }
-
-            currentDeferredHistoryQuery = deferredHistory
-
             let deferredBookmarks = getBookmarksAsSites(matchingSearchQuery: query, limit: 5)
 
-            all([deferredHistory, deferredBookmarks]).uponQueue(.main) { results in
+            var deferredQueries = [deferredBookmarks]
+            let historyHighlightsEnabled = featureFlags.isFeatureEnabled(.searchHighlights, checking: .buildOnly)
+            if !historyHighlightsEnabled {
+                // Lets only add the history query if history highlights are not enabled
+                deferredQueries.append(getHistoryAsSites(matchingSearchQuery: query, limit: 100))
+            }
+
+            all(deferredQueries).uponQueue(.main) { results in
                 defer {
                     self.currentDeferredHistoryQuery = nil
+                    GleanMetrics.Awesomebar.queryTime.stopAndAccumulate(timerid)
                 }
 
-                guard !deferredHistory.cancelled else {
-                    return
+                let deferredBookmarksSites = results[safe: 0]?.successValue?.asArray() ?? []
+                var combinedSites = deferredBookmarksSites
+                if !historyHighlightsEnabled {
+                    let cancellableHistory = deferredQueries[safe: 1] as? CancellableDeferred
+                    if let cancellableHistory = cancellableHistory, cancellableHistory.cancelled {
+                        return
+                    }
+                    let deferredHistorySites = results[safe: 1]?.successValue?.asArray() ?? []
+                    combinedSites += deferredHistorySites
                 }
-
-                let deferredHistorySites = results[0].successValue?.asArray() ?? []
-                let deferredBookmarksSites = results[1].successValue?.asArray() ?? []
-                let combinedSites = deferredBookmarksSites + deferredHistorySites
 
                 // Load the data in the table view.
                 self.load(ArrayCursor(data: combinedSites))
 
                 // If the new search string is not longer than the previous
                 // we don't need to find an autocomplete suggestion.
-                guard oldValue.count < self.query.count else {
-                    return
-                }
+                guard oldValue.count < self.query.count else { return }
 
                 // If we should skip the next autocomplete, reset
                 // the flag and bail out here.
@@ -132,14 +151,16 @@ class SearchLoader: Loader<Cursor<Site>, SearchViewController> {
         // Extract the pre-path substring from the URL. This should be more efficient than parsing via
         // NSURL since we need to only look at the beginning of the string.
         // Note that we won't match non-HTTP(S) URLs.
-        guard let match = URLBeforePathRegex.firstMatch(in: url, options: [], range: NSRange(location: 0, length: url.count)) else {
-            return nil
-        }
+        guard let match = URLBeforePathRegex.firstMatch(
+            in: url,
+            options: [],
+            range: NSRange(location: 0, length: url.count))
+        else { return nil }
 
         // If the pre-path component (including the scheme) starts with the query, just use it as is.
         var prePathURL = (url as NSString).substring(with: match.range(at: 0))
         if prePathURL.hasPrefix(query) {
-            // Trailing slashes in the autocompleteTextField cause issues with Swype keyboard. Bug 1194714
+            // Trailing slashes in the autocompleteTextField cause issues with Swipe keyboard. Bug 1194714
             if prePathURL.hasSuffix("/") {
                 prePathURL.remove(at: prePathURL.index(before: prePathURL.endIndex))
             }

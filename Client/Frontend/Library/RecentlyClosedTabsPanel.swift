@@ -3,12 +3,9 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0
 
 import UIKit
-
 import Shared
 import Storage
-import XCGLogger
-
-private let log = Logger.browserLogger
+import SiteImageView
 
 private struct RecentlyClosedPanelUX {
     static let IconSize = CGSize(width: 23, height: 23)
@@ -23,8 +20,10 @@ protocol RecentlyClosedPanelDelegate: AnyObject {
 
 class RecentlyClosedTabsPanel: UIViewController, LibraryPanel {
     weak var libraryPanelDelegate: LibraryPanelDelegate?
+    var state: LibraryPanelMainState = .history(state: .inFolder)
     var recentlyClosedTabsDelegate: RecentlyClosedPanelDelegate?
     let profile: Profile
+    var bottomToolbarItems: [UIBarButtonItem] = [UIBarButtonItem]()
 
     fileprivate lazy var tableViewController = RecentlyClosedTabsPanelSiteTableViewController(profile: profile)
 
@@ -50,13 +49,26 @@ class RecentlyClosedTabsPanel: UIViewController, LibraryPanel {
         tableViewController.didMove(toParent: self)
 
         self.view.addSubview(tableViewController.view)
-        
+
         NSLayoutConstraint.activate([
             tableViewController.view.topAnchor.constraint(equalTo: view.topAnchor),
             tableViewController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableViewController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             tableViewController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        /// BVC is assigned as `RecentlyClosedTabsPanel` delegate, to support opening tabs from within it.
+        /// Previously, BVC was assigned it on panel creation via a foregroundBVC call. But it can be done this way, to
+        /// avoid that call. `sceneForVC` will use the focused, active and foregrounded scene's BVC.
+        guard recentlyClosedTabsDelegate != nil else {
+            recentlyClosedTabsDelegate = sceneForVC?.browserViewController
+
+            return
+        }
     }
 }
 
@@ -91,18 +103,14 @@ class RecentlyClosedTabsPanelSiteTableViewController: SiteTableViewController {
         }
         let tab = recentlyClosedTabs[indexPath.row]
         let displayURL = tab.url.displayURL ?? tab.url
-        let site: Favicon? = (tab.faviconURL != nil) ? Favicon(url: tab.faviconURL!) : nil
         twoLineCell.descriptionLabel.isHidden = false
         twoLineCell.titleLabel.text = tab.title
         twoLineCell.titleLabel.isHidden = tab.title?.isEmpty ?? true ? true : false
-        twoLineCell.descriptionLabel.text = displayURL.absoluteDisplayString        
+        twoLineCell.descriptionLabel.text = displayURL.absoluteDisplayString
         twoLineCell.leftImageView.layer.borderColor = RecentlyClosedPanelUX.IconBorderColor.cgColor
         twoLineCell.leftImageView.layer.borderWidth = RecentlyClosedPanelUX.IconBorderWidth
-        twoLineCell.leftImageView.contentMode = .center
-        twoLineCell.leftImageView.setImageAndBackground(forIcon: site, website: displayURL) { [weak twoLineCell] in
-            twoLineCell?.leftImageView.image = twoLineCell?.leftImageView.image?.createScaled(RecentlyClosedPanelUX.IconSize)
-        }
-        
+        twoLineCell.leftImageView.setFavicon(FaviconImageViewModel(urlStringRequest: displayURL.absoluteString))
+
         return twoLineCell
     }
 
@@ -126,6 +134,14 @@ class RecentlyClosedTabsPanelSiteTableViewController: SiteTableViewController {
         return self.recentlyClosedTabs.count
     }
 
+    // MARK: - Libray Toolbar actions
+    func handleBackButton() {
+        // no implementation needed
+    }
+
+    func handleDoneButton() {
+        // no implementation needed
+    }
 }
 
 extension RecentlyClosedTabsPanelSiteTableViewController: LibraryPanelContextMenu {

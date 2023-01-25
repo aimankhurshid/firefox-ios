@@ -11,7 +11,6 @@ struct SlideOverUXConstants {
 }
 
 class SlideOverPresentationController: UIPresentationController {
-
     let blurEffectView: UIVisualEffectView!
     var tapGestureRecognizer: UITapGestureRecognizer = UITapGestureRecognizer()
     var globalETPStatus: Bool
@@ -76,7 +75,7 @@ class SlideOverPresentationController: UIPresentationController {
         blurEffectView.frame = containerView!.bounds
     }
 
-    @objc func dismissController(){
+    @objc func dismissController() {
         presentedViewController.dismiss(animated: true, completion: nil)
     }
 }

@@ -5,15 +5,15 @@
 import Foundation
 import Shared
 
-public struct ClipboardBarToastUX {
-    static let ToastDelay = DispatchTimeInterval.milliseconds(4000)
-}
-
 protocol ClipboardBarDisplayHandlerDelegate: AnyObject {
-    func shouldDisplay(clipboardBar bar: ButtonToast)
+    func shouldDisplay(clipBoardURL url: URL)
 }
 
 class ClipboardBarDisplayHandler: NSObject, URLChangeDelegate {
+    public struct UX {
+        static let toastDelay = DispatchTimeInterval.milliseconds(10000)
+    }
+
     weak var delegate: (ClipboardBarDisplayHandlerDelegate & SettingsDelegate)?
     weak var settingsDelegate: SettingsDelegate?
     weak var tabManager: TabManager?
@@ -39,16 +39,17 @@ class ClipboardBarDisplayHandler: NSObject, URLChangeDelegate {
         // UIPasteboardChanged gets triggered when calling UIPasteboard.general.
         NotificationCenter.default.removeObserver(self, name: UIPasteboard.changedNotification, object: nil)
 
-        UIPasteboard.general.asyncURL().uponQueue(.main) { res in
-            defer {
-                NotificationCenter.default.addObserver(self, selector: #selector(self.UIPasteboardChanged), name: UIPasteboard.changedNotification, object: nil)
-            }
+        UIPasteboard.general.asyncURL { url in
+            ensureMainThread {
+                defer {
+                    NotificationCenter.default.addObserver(self, selector: #selector(self.UIPasteboardChanged), name: UIPasteboard.changedNotification, object: nil)
+                }
 
-            guard let copiedURL: URL? = res.successValue,
-                let url = copiedURL else {
+                guard let url = url else {
                     return
+                }
+                self.lastDisplayedURL = url.absoluteString
             }
-            self.lastDisplayedURL = url.absoluteString
         }
     }
 
@@ -113,12 +114,13 @@ class ClipboardBarDisplayHandler: NSObject, URLChangeDelegate {
         }
 
         if let url = URL(string: clipboardURL),
-            let _ = tabManager?.getTabFor(url) {
+           tabManager?.getTabFor(url) != nil {
             return true
         }
+
         return false
     }
-    
+
     func checkIfShouldDisplayBar() {
         // Clipboard bar feature needs to be enabled by users to be activated in the user settings
         guard prefs.boolForKey("showClipboardBar") ?? false else { return }
@@ -126,22 +128,8 @@ class ClipboardBarDisplayHandler: NSObject, URLChangeDelegate {
         guard UIPasteboard.general.hasURLs,
               let url = UIPasteboard.general.url,
               shouldDisplayBar(url.absoluteString) else { return }
-        
-        self.lastDisplayedURL = url.absoluteString
-        
-        self.clipboardToast =
-        ButtonToast(
-            labelText: .GoToCopiedLink,
-            descriptionText: url.absoluteDisplayString,
-            buttonText: .GoButtonTittle,
-            completion: { buttonPressed in
-                if buttonPressed {
-                    self.delegate?.settingsOpenURLInNewTab(url)
-                }
-            })
-        
-        if let toast = self.clipboardToast {
-            delegate?.shouldDisplay(clipboardBar: toast)
-        }
+
+        lastDisplayedURL = url.absoluteString
+        delegate?.shouldDisplay(clipBoardURL: url)
     }
 }

@@ -5,7 +5,6 @@
 import Shared
 import Storage
 import Sync
-import XCGLogger
 import UserNotifications
 import Account
 
@@ -24,16 +23,17 @@ extension UIApplication {
  when the app performs a sync.
  */
 class AppSyncDelegate: SyncDelegate {
-    let app: UIApplication
+    private let app: UIApplication
 
     init(app: UIApplication) {
         self.app = app
     }
 
     func displaySentTab(for url: URL, title: String, from deviceName: String?) {
-        DispatchQueue.main.sync {
-            if app.applicationState == .active {
-                BrowserViewController.foregroundBVC().switchToTabForURLOrOpen(url)
+        DispatchQueue.main.async {
+            if self.app.applicationState == .active {
+                let object = OpenTabNotificationObject(type: .switchToTabForURLOrOpen(url))
+                NotificationCenter.default.post(name: .OpenTabNotification, object: object)
                 return
             }
 

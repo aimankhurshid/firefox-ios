@@ -4,9 +4,6 @@
 
 import Foundation
 import Shared
-import XCGLogger
-
-private let log = Logger.syncLogger
 
 open class SQLiteQueue: TabQueue {
     let db: BrowserDB
@@ -21,7 +18,7 @@ open class SQLiteQueue: TabQueue {
     }
 
     fileprivate func factory(_ row: SDRow) -> ShareItem {
-        return ShareItem(url: row["url"] as! String, title: row["title"] as? String, favicon: nil)
+        return ShareItem(url: row["url"] as! String, title: row["title"] as? String)
     }
 
     open func getQueuedTabs() -> Deferred<Maybe<Cursor<ShareItem>>> {
