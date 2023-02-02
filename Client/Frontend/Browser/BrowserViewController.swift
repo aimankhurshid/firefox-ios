@@ -14,6 +14,7 @@ import MobileCoreServices
 import Telemetry
 import Sentry
 import Common
+import Logger
 
 struct UrlToOpenModel {
     var url: URL?
@@ -147,6 +148,7 @@ class BrowserViewController: UIViewController {
 
     private var keyboardPressesHandlerValue: Any?
     var themeManager: ThemeManager
+    var logger: Logger
 
     @available(iOS 13.4, *)
     func keyboardPressesHandler() -> KeyboardPressesHandler {
@@ -157,14 +159,15 @@ class BrowserViewController: UIViewController {
         return keyboardPressesHandlerValue
     }
 
-    fileprivate var shouldShowIntroScreen: Bool { profile.prefs.intForKey(PrefsKeys.IntroSeen) == nil }
+    private var shouldShowIntroScreen: Bool { profile.prefs.intForKey(PrefsKeys.IntroSeen) == nil }
 
     init(
         profile: Profile,
         tabManager: TabManager,
         themeManager: ThemeManager = AppContainer.shared.resolve(),
         ratingPromptManager: RatingPromptManager = AppContainer.shared.resolve(),
-        downloadQueue: DownloadQueue = AppContainer.shared.resolve()
+        downloadQueue: DownloadQueue = AppContainer.shared.resolve(),
+        logger: Logger = DefaultLogger.shared
     ) {
         self.profile = profile
         self.tabManager = tabManager
@@ -172,6 +175,7 @@ class BrowserViewController: UIViewController {
         self.ratingPromptManager = ratingPromptManager
         self.readerModeCache = DiskReaderModeCache.sharedInstance
         self.downloadQueue = downloadQueue
+        self.logger = logger
 
         let contextViewModel = ContextualHintViewModel(forHintType: .toolbarLocation,
                                                        with: profile)
@@ -405,7 +409,7 @@ class BrowserViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         KeyboardHelper.defaultHelper.addDelegate(self)
-        trackAccessibility()
+        trackTelemetry()
         setupNotifications()
         addSubviews()
 
@@ -608,6 +612,7 @@ class BrowserViewController: UIViewController {
             make.top.left.right.equalTo(self.view)
             make.height.equalTo(self.view.safeAreaInsets.top)
         }
+        showQueuedAlertIfAvailable()
     }
 
     override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -880,7 +885,7 @@ class BrowserViewController: UIViewController {
         isCrashAlertShowing = true
     }
 
-    fileprivate func showQueuedAlertIfAvailable() {
+    private func showQueuedAlertIfAvailable() {
         if let queuedAlertInfo = tabManager.selectedTab?.dequeueJavascriptAlertPrompt() {
             let alertController = queuedAlertInfo.alertController()
             alertController.delegate = self
@@ -1530,7 +1535,7 @@ class BrowserViewController: UIViewController {
 
     private func showSendToDevice() {
         guard let selectedTab = tabManager.selectedTab,
-              let url = selectedTab.url
+              let url = selectedTab.canonicalURL?.displayURL
         else { return }
 
         let themeColors = themeManager.currentTheme.colors
@@ -1873,7 +1878,9 @@ extension BrowserViewController: LibraryPanelDelegate {
 
     func libraryPanel(didSelectURLString url: String, visitType: VisitType) {
         guard let url = URIFixup.getURL(url) ?? profile.searchEngines.defaultEngine.searchURLForQuery(url) else {
-            Logger.browserLogger.warning("Invalid URL, and couldn't generate a search URL for it.")
+            logger.log("Invalid URL, and couldn't generate a search URL for it.",
+                       level: .warning,
+                       category: .library)
             return
         }
         return self.libraryPanel(didSelectURL: url, visitType: visitType)
@@ -2738,6 +2745,11 @@ extension BrowserViewController {
 }
 
 extension BrowserViewController {
+    func trackTelemetry() {
+        trackAccessibility()
+        trackNotificationPermission()
+    }
+
     func trackAccessibility() {
         TelemetryWrapper.recordEvent(category: .action,
                                      method: .voiceOver,
@@ -2765,5 +2777,9 @@ extension BrowserViewController {
                                      extras: [
                                         TelemetryWrapper.EventExtraKey.isAccessibilitySizeEnabled.rawValue: UIApplication.shared.preferredContentSizeCategory.isAccessibilityCategory.description,
                                         TelemetryWrapper.EventExtraKey.preferredContentSizeCategory.rawValue: UIApplication.shared.preferredContentSizeCategory.rawValue.description])
+    }
+
+    func trackNotificationPermission() {
+        NotificationManager().getNotificationSettings { _ in }
     }
 }

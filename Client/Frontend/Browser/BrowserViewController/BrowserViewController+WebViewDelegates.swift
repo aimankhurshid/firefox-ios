@@ -3,11 +3,10 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0
 
 import Foundation
+import Logger
 import WebKit
 import Shared
 import UIKit
-
-private let log = Logger.browserLogger
 
 /// List of schemes that are allowed to be opened in new tabs.
 private let schemesAllowedToBeOpenedAsPopups = ["http", "https", "javascript", "data", "about"]
@@ -56,12 +55,16 @@ extension BrowserViewController: WKUIDelegate {
         return false
     }
 
-    fileprivate func shouldDisplayJSAlertForWebView(_ webView: WKWebView) -> Bool {
+    private func shouldDisplayJSAlertForWebView(_ webView: WKWebView) -> Bool {
         // Only display a JS Alert if we are selected and there isn't anything being shown
         return ((tabManager.selectedTab == nil ? false : tabManager.selectedTab!.webView == webView)) && (self.presentedViewController == nil)
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping () -> Void) {
         let messageAlert = MessageAlert(message: message, frame: frame, completionHandler: completionHandler)
         if shouldDisplayJSAlertForWebView(webView) {
             present(messageAlert.alertController(), animated: true, completion: nil)
@@ -475,7 +478,9 @@ extension BrowserViewController: WKNavigationDelegate {
 
         if InternalURL.isValid(url: url) {
             if navigationAction.navigationType != .backForward, navigationAction.isInternalUnprivileged {
-                log.warning("Denying unprivileged request: \(navigationAction.request)")
+                logger.log("Denying unprivileged request: \(navigationAction.request)",
+                           level: .warning,
+                           category: .webview)
                 decisionHandler(.cancel)
                 return
             }

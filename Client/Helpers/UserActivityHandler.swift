@@ -9,13 +9,17 @@ import CoreSpotlight
 import MobileCoreServices
 import WebKit
 import SiteImageView
+import Logger
 
 private let browsingActivityType: String = "org.mozilla.ios.firefox.browsing"
 
 private let searchableIndex = CSSearchableIndex.default()
 
 class UserActivityHandler {
-    init() {
+    private let logger: Logger
+
+    init(logger: Logger = DefaultLogger.shared) {
+        self.logger = logger
         register(self, forTabEvents: .didClose, .didLoseFocus, .didGainFocus, .didChangeURL, .didLoadPageMetadata, .didLoadReadability)
     }
 
@@ -74,8 +78,6 @@ extension UserActivityHandler: TabEventHandler {
     }
 }
 
-private let log = Logger.browserLogger
-
 extension UserActivityHandler {
     func spotlightIndex(_ page: ReadabilityResult, for tab: Tab) async {
         guard let url = tab.url,
@@ -108,10 +110,10 @@ extension UserActivityHandler {
         case .favicon:
             if let urlString = tab.url?.absoluteString {
                 let faviconFetcher = DefaultSiteImageHandler.factory()
-                let image = await faviconFetcher.getImage(urlStringRequest: urlString,
-                                                          type: .favicon,
-                                                          id: UUID(),
-                                                          usesIndirectDomain: false)
+                let siteImageModel = SiteImageModel(id: UUID(),
+                                                    expectedImageType: .favicon,
+                                                    siteURLString: urlString)
+                let image = await faviconFetcher.getImage(site: siteImageModel)
                 attributeSet.thumbnailData = image.faviconImage?.pngData()
             }
         default:
@@ -136,18 +138,26 @@ extension UserActivityHandler {
         }
         do {
             try await searchableIndex.indexSearchableItems([item])
-            log.info("Spotlight: Search item successfully indexed!")
+            logger.log("Spotlight: Search item successfully indexed!",
+                       level: .info,
+                       category: .setup)
         } catch {
-            log.info("Spotlight: Indexing error: \(error.localizedDescription)")
+            logger.log("Spotlight: Indexing error: \(error.localizedDescription)",
+                       level: .warning,
+                       category: .setup)
         }
     }
 
     func spotlightDeindex(_ page: ReadabilityResult) {
         searchableIndex.deleteSearchableItems(withIdentifiers: [page.url]) { error in
             if let error = error {
-                log.info("Spotlight: Deindexing error: \(error.localizedDescription)")
+                self.logger.log("Spotlight: Deindexing error: \(error.localizedDescription)",
+                                level: .warning,
+                                category: .setup)
             } else {
-                log.info("Spotlight: Search item successfully removed!")
+                self.logger.log("Spotlight: Search item successfully removed!",
+                                level: .info,
+                                category: .setup)
             }
         }
     }
