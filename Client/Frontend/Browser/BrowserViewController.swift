@@ -948,6 +948,9 @@ class BrowserViewController: UIViewController {
         homepageViewController?.view.layer.removeAllAnimations()
         view.setNeedsUpdateConstraints()
 
+        // Make sure reload button is hidden on homepage
+        urlBar.locationView.reloadButton.reloadButtonState = .disabled
+
         // Return early if the home page is already showing
         guard homepageViewController?.view.alpha != 1 else { return }
 
@@ -965,9 +968,6 @@ class BrowserViewController: UIViewController {
                 UIAccessibility.post(notification: UIAccessibility.Notification.screenChanged, argument: nil)
                 self.homepageViewController?.homepageDidAppear()
             })
-
-        // Make sure reload button is hidden on homepage
-        urlBar.locationView.reloadButton.reloadButtonState = .disabled
     }
 
     /// Once the homepage is created, browserViewController keeps a reference to it, never setting it to nil during
